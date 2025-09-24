@@ -11,17 +11,17 @@ public class Cliente {
         this.cantidadDeLibros = cantidadDeLibros;
     }
 
-    public int getId() { 
-        return id; 
+    public int getDni() { 
+        return this.dni; 
     }
-    public void setId(int id) { 
-        this.id = id; 
+    public void setDni(int dni) { 
+        this.dni = dni;
     }
 
     public int getCantidadDeLibros() { 
         return this.cantidadDeLibros; 
     }
-    public int setCantidadDeLibros(int cantidadDeLibros) { 
+    public void setCantidadDeLibros(int cantidadDeLibros) { 
         this.cantidadDeLibros = cantidadDeLibros; 
     }
 

@@ -1,4 +1,4 @@
-package com.proyectoprogramacion2;
+package modelo;
 
 public class Ejemplar {
     private int idEjemplar;

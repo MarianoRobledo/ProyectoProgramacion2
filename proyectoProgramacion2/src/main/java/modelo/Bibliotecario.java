@@ -1,18 +1,33 @@
-package com.proyectoprogramacion2;
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
+package modelo;
 
 import java.util.Date;
 
-public class Cliente extends Persona{
-    private int dni;
-    private int cantidadDeLibros;
+/**
+ *
+ * @author mariano
+ */
+public class Bibliotecario extends Persona{
+    
+    protected int dni;
 
-    public Cliente() {}
-    
-    
-    public Cliente(String nombre, String apellido, Date fechaDeNacimiento, int telefono, String email,int dni, int cantidadDeLibros) {
+    public Bibliotecario() {
+    }
+
+    public Bibliotecario(int dni, String nombre, String apellido, Date fechaDeNacimiento, int telefono, String email) {
         super(nombre, apellido, fechaDeNacimiento, telefono, email);
         this.dni = dni;
-        this.cantidadDeLibros = cantidadDeLibros;
+    }
+
+    public int getDni() {
+        return dni;
+    }
+
+    public void setDni(int dni) {
+        this.dni = dni;
     }
 
     public String getNombre() {
@@ -54,20 +69,7 @@ public class Cliente extends Persona{
     public void setEmail(String email) {
         this.email = email;
     }
-
     
-    public int getDni() { 
-        return this.dni; 
-    }
-    public void setDni(int dni) { 
-        this.dni = dni;
-    }
-
-    public int getCantidadDeLibros() { 
-        return this.cantidadDeLibros; 
-    }
-    public void setCantidadDeLibros(int cantidadDeLibros) { 
-        this.cantidadDeLibros = cantidadDeLibros; 
-    }
-
+    // Seudo ABM de Cliente
+    
 }

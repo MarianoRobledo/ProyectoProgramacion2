@@ -1,4 +1,4 @@
-package com.proyectoprogramacion2;
+package modelo;
 
 import java.util.ArrayList;
 import java.util.List;

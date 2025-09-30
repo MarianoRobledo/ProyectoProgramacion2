@@ -1,4 +1,4 @@
-package com.proyectoprogramacion2;
+package modelo;
 
 public class Editorial {
     private String nombre;

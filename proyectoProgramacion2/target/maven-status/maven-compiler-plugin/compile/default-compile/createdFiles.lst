@@ -1,0 +1,15 @@
+com/uncuyo/biblioteca/model/Libro.class
+com/uncuyo/biblioteca/model/Autor.class
+com/uncuyo/biblioteca/BibliotecaApplication.class
+com/uncuyo/biblioteca/repository/PersonaRepository$1.class
+com/uncuyo/biblioteca/service/PersonaService.class
+com/uncuyo/biblioteca/model/Ejemplar.class
+com/uncuyo/biblioteca/model/Editorial.class
+com/uncuyo/biblioteca/repository/PersonaRepository.class
+com/uncuyo/biblioteca/repository/LibroRepository.class
+com/uncuyo/biblioteca/controller/HomeController.class
+com/uncuyo/biblioteca/model/Persona.class
+com/uncuyo/biblioteca/model/Prestamo.class
+com/uncuyo/biblioteca/repository/LibroRepository$1.class
+com/uncuyo/biblioteca/service/LibroService.class
+com/uncuyo/biblioteca/controller/LibroController.class

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Libros</title>
+</head>
+<body>
+<h1>Libros</h1>
+<div th:if="${user}">
+    <p>Usuario: <span th:text="${user.nombre}"></span> (<span th:text="${user.rol}"></span>)</p>
+    <a href="/">Inicio</a> | <a href="/logout">Salir</a>
+</div>
+<div th:if="${user == null}">
+    <a href="/login">Login</a>
+</div>
+
+<div th:if="${user != null and user.rol != 'CLIENTE'}">
+    <a href="/libros/nuevo">Crear nuevo libro</a>
+</div>
+
+<table border="1">
+    <tr><th>ID</th><th>Título</th><th>ISBN</th><th>Disponible</th><th>Acciones</th></tr>
+    <tr th:each="libro : ${libros}">
+        <td th:text="${libro.id}"></td>
+        <td th:text="${libro.titulo}"></td>
+        <td th:text="${libro.isbn}"></td>
+        <td th:text="${libro.disponible} ? 'Sí' : 'No'"></td>
+        <td>
+            <a th:href="@{'/libros/editar/' + ${libro.id}}" th:if="${user != null and user.rol != 'CLIENTE'}">Editar</a>
+            <a th:href="@{'/libros/eliminar/' + ${libro.id}}" th:if="${user != null and user.rol != 'CLIENTE'}">Eliminar</a>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

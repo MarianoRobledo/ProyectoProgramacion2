@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8" />
+    <title>Biblioteca</title>
+</head>
+<body>
+<h1>Bienvenido a la Biblioteca</h1>
+<div th:if="${user}">
+    <p>Conectado como <b th:text="${user.nombre}"></b> (<span th:text="${user.rol}"></span>)</p>
+    <a href="/libros">Ver libros</a> | <a href="/logout">Salir</a>
+</div>
+<div th:if="${user} == null">
+    <a href="/login">Iniciar sesión</a>
+</div>
+</body>
+</html>

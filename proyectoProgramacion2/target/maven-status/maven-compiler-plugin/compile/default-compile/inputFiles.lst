@@ -1,0 +1,13 @@
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/BibliotecaApplication.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/controller/HomeController.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/controller/LibroController.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Autor.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Editorial.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Ejemplar.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Libro.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Persona.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/model/Prestamo.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/repository/LibroRepository.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/repository/PersonaRepository.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/service/LibroService.java
+/home/mariano/Downloads/draft/ProyectoProgramacion2_draft/src/main/java/com/uncuyo/biblioteca/service/PersonaService.java

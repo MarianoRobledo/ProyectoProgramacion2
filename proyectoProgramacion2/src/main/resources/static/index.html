@@ -1,0 +1,884 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>Biblioteca - SPA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 20px
+    }
+
+    .nav {
+      margin-bottom: 16px
+    }
+
+    button {
+      margin-right: 8px
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      text-align: center;
+    }
+
+    td,
+    th {
+      border: 1px solid #ddd;
+      padding: 8px
+    }
+
+    .hidden {
+      display: none
+    }
+  </style>
+  <!-- React + Babel from CDN for quick dev (no build) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    
+    const { useState, useEffect, useRef } = React;
+
+    // Helpers
+    const safeFetchJson = async (url, opts) => {
+      try {
+        const res = await fetch(url, opts);
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (e) { return null; }
+    };
+
+    const debounce = (fn, wait = 400) => {
+      let t;
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    };
+
+    // Format date string to dd-MM-yyyy 
+    const formatDate = (d) => {
+      if (!d) return '';
+      // try to extract ISO date part (yyyy-MM-dd)
+      const m = String(d).match(/(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+      // fallback: try Date parse
+      const dt = new Date(d);
+      if (!isNaN(dt)) {
+        const day = String(dt.getDate()).padStart(2, '0');
+        const month = String(dt.getMonth() + 1).padStart(2, '0');
+        const year = dt.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+      return String(d);
+    };
+
+    // Main App
+    function App() {
+      const [dni, setDni] = useState('');
+      const [user, setUser] = useState(null); // { role, user }
+      const [error, setError] = useState(null);
+
+      async function login(e) {
+        e && e.preventDefault();
+        setError(null);
+        if (!dni) { setError('Ingrese DNI'); return; }
+        try {
+          const res = await fetch('/api/auth/login?dni=' + encodeURIComponent(dni));
+          const body = await res.json();
+          if (!body.role) { 
+            setError('Usuario no encontrado'); 
+            setUser(null); return; 
+          }
+          setUser(body);
+        } catch (err) {
+          setError('Error al contactar al servidor');
+          setUser(null);
+        }
+      }
+
+      function logout() { setUser(null); setDni(''); setError(null); }
+
+      return (
+        <div>
+          <h1>Biblioteca</h1>
+          {!user && (
+            <form onSubmit={login} style={{ marginBottom: 12 }}>
+              <label>Ingrese DNI: </label>
+              <input value={dni} onChange={e => setDni(e.target.value)} style={{ width: 140 }} />
+              <button type="submit">Ingresar</button>
+              {error && <span style={{ color: 'red', marginLeft: 8 }}>{error}</span>}
+            </form>
+          )}
+
+          {user && (
+            <div className="nav">
+              <strong>Conectado como:</strong> <span style={{ marginLeft: 8 }}>{user.role}</span>
+              <button style={{ marginLeft: 12 }} onClick={logout}>Cerrar sesión</button>
+            </div>
+          )}
+
+          <MainView auth={user} />
+        </div>
+      );
+    }
+
+    function MainView({ auth }) {
+      if (!auth) return <div>Por favor, inicie sesión con su DNI.</div>;
+      const { role, user } = auth;
+      if (role === 'Cliente') return <ClientView client={user} />;
+      if (role === 'Bibliotecario') return <BibliotecarioView user={user} />;
+      if (role === 'Administrador') return <AdminView user={user} />;
+      return <div>Rol desconocido.</div>;
+    }
+
+    function ClientView({ client }) {
+      const [prestamos, setPrestamos] = useState([]);
+      const [ejemplares, setEjemplares] = useState([]);
+      const [libros, setLibros] = useState([]);
+      const saves = useRef({});
+
+      function clientIdFromObject(obj) { return obj.id || obj.legajo || obj.dni; }
+
+      async function loadAll() {
+        const [allPrest, allEj, allLib] = await Promise.all([
+          safeFetchJson('/api/prestamos') || [],
+          safeFetchJson('/api/ejemplares') || [],
+          safeFetchJson('/api/libros') || []
+        ]);
+        const mine = (Array.isArray(allPrest) ? allPrest : []).filter(p => String(p.clienteId) === String(client.id || clientIdFromObject(client)));
+        setPrestamos(mine);
+        setEjemplares(Array.isArray(allEj) ? allEj : []);
+        setLibros(Array.isArray(allLib) ? allLib : []);
+      }
+
+      useEffect(() => { if (client) loadAll(); }, [client]);
+
+      const ejemplarTitle = (ejId) => {
+        const ej = ejemplares.find(e => String(e.id) === String(ejId));
+        if (!ej) return String(ejId);
+        const lib = libros.find(l => String(l.id) === String(ej.libroId));
+        return lib ? `${lib.titulo} (ejemplar ${ej.id})` : `ejemplar ${ej.id}`;
+      };
+
+      const savePrestamo = (id, updated) => {
+        // Debounce per id
+        if (saves.current[id]) clearTimeout(saves.current[id]);
+        saves.current[id] = setTimeout(async () => {
+          await fetch('/api/prestamos/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+          loadAll();
+        }, 500);
+      };
+
+      return (
+        <div>
+          <p>Préstamos de: {client.nombre} {client.apellido}</p>
+          <table><thead><tr><th>ID</th><th style={{textAlign: 'left'}}>Libro / Ejemplar</th><th>Inicio</th><th>Devolución</th></tr></thead>
+            <tbody>{prestamos.map(p => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td style={{textAlign: 'left'}}>{ejemplarTitle(p.ejemplarId)}</td>
+                <td>{formatDate(p.fechaInicio)}</td>
+                {(p.fechaDevolucion != null) ? (<td>{formatDate(p.fechaDevolucion)}</td>) : (<td>--</td>)}
+                {/*<td>
+                  <input type="date" value={p.fechaDevolucion || ''} onChange={e => {
+                    const val = e.target.value || null;
+                    const updated = { ...p, fechaDevolucion: val };
+                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
+                    savePrestamo(p.id, updated);
+                  }} />
+                </td>*/}
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function BibliotecarioView({ user }) {
+      const [view, setView] = useState('prestamos');
+      return (
+        <div>
+          <h2>Bibliotecario: {user.nombre} {user.apellido} (Legajo {user.legajo})</h2>
+          <label>Gestionar: </label>
+          <select value={view} onChange={e => setView(e.target.value)}>
+            <option value="prestamos">Préstamos</option>
+            <option value="clientes">Clientes</option>
+          </select>
+
+          <div style={{ marginTop: 12 }}>
+            {view === 'prestamos' && <PrestamosManager />}
+            {view === 'clientes' && <ClientesManager />}
+          </div>
+        </div>
+      );
+    }
+
+    function AdminView({ user }) {
+      const [view, setView] = useState('libros');
+      return (
+        <div>
+          <h2>Administrador: {user.nombre} {user.apellido} (Legajo {user.legajo})</h2>
+          <label>Gestionar: </label>
+          <select value={view} onChange={e => setView(e.target.value)}>
+            <option value="biblioteca">Biblioteca</option>
+            <option value="libros">Libros</option>
+            <option value="autores">Autores</option>
+            <option value="editoriales">Editoriales</option>
+            <option value="ejemplares">Ejemplares</option>
+            <option value="bibliotecarios">Bibliotecarios</option>
+            <option value="prestamos">Préstamos</option>
+            <option value="clientes">Clientes</option>
+          </select>
+
+          <div style={{ marginTop: 12 }}>
+            {view === 'libros' && <BooksManager />}
+            {view === 'autores' && <AuthorsManager />}
+            {view === 'editoriales' && <EditorialsManager />}
+            {view === 'ejemplares' && <EjemplaresManager />}
+            {view === 'bibliotecarios' && <BibliotecariosManager />}
+            {view === 'biblioteca' && <BibliotecaManager />}
+            {view === 'prestamos' && <PrestamosManager />}
+            {view === 'clientes' && <ClientesManager />}
+          </div>
+        </div>
+      );
+    }
+
+    // Views
+    function BooksManager() {
+      const [list, setList] = useState([]);
+      const [autores, setAutores] = useState([]);
+      const [editoriales, setEditoriales] = useState([]);
+      const [form, setForm] = useState({ titulo: '', isbn: '', autorId: '', editorialId: '' });
+      const saves = useRef({});
+
+      async function loadAll() {
+        const [l, a, e] = await Promise.all([safeFetchJson('/api/libros') || [], safeFetchJson('/api/autores') || [], safeFetchJson('/api/editoriales') || []]);
+        setList(Array.isArray(l) ? l : []);
+        setAutores(Array.isArray(a) ? a : []);
+        setEditoriales(Array.isArray(e) ? e : []);
+      }
+
+      useEffect(() => { loadAll(); }, []);
+
+      async function addBook() { await fetch('/api/libros', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setForm({ titulo: '', isbn: '', autorId: '', editorialId: '' }); loadAll(); }
+      async function deleteBook(id) { if (!confirm('Eliminar libro ' + id + '?')) return; await fetch('/api/libros/' + id, { method: 'DELETE' }); loadAll(); }
+
+      function scheduleSave(id, updated) {
+        if (saves.current[id]) clearTimeout(saves.current[id]);
+        saves.current[id] = setTimeout(async () => { await fetch('/api/libros/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); loadAll(); delete saves.current[id]; }, 500);
+      }
+
+      return (
+        <div>
+          <h3>Libros</h3>
+          <table><thead><tr><th>ID</th><th>Título</th><th>ISBN</th><th>Autor</th><th>Editorial</th><th>Acciones</th></tr></thead>
+            <tbody>{list.map(l => (
+              <tr key={l.id}>
+                <td>{l.id}</td>
+                <td><input value={l.titulo || ''} onChange={e => { const u = { ...l, titulo: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
+                <td><input value={l.isbn || ''} onChange={e => { const u = { ...l, isbn: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
+                <td><select value={l.autorId || ''} onChange={e => { const u = { ...l, autorId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{autores.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}</select></td>
+                <td><select value={l.editorialId || ''} onChange={e => { const u = { ...l, editorialId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{editoriales.map(ei => <option key={ei.id} value={ei.id}>{ei.nombre}</option>)}</select></td>
+                <td><button onClick={() => deleteBook(l.id)}>Eliminar</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <h4>Agregar Libro</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Título</th><th>ISBN</th><th>Autor</th><th>Editorial</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Título" value={form.titulo} onChange={e => setForm({ ...form, titulo: e.target.value })} /></td>
+                <td><input placeholder="ISBN" value={form.isbn} onChange={e => setForm({ ...form, isbn: e.target.value })} /></td>
+                <td>
+                  <select value={form.autorId} onChange={e => setForm({ ...form, autorId: e.target.value })}>
+                    <option value="">-</option>{autores.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                  </select>
+                </td>
+                <td>
+                  <select value={form.editorialId} onChange={e => setForm({ ...form, editorialId: e.target.value })}>
+                    <option value="">-</option>{editoriales.map(ei => <option key={ei.id} value={ei.id}>{ei.nombre}</option>)}
+                  </select>
+                </td>
+                <td><button onClick={addBook}>Agregar libro</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function AuthorsManager() {
+      const [list, setList] = useState([]);
+      const [form, setForm] = useState({ nombre: '', fechaDeNacimiento: '', fechaDeFallecimiento: '', nacionalidad: '' });
+      const saves = useRef({});
+      async function load() { 
+        const d = await safeFetchJson('/api/autores'); 
+        setList(Array.isArray(d) ? d : []); 
+      }
+      useEffect(() => { load(); }, []);
+      async function add() { 
+        await fetch('/api/autores', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(form) 
+        }); 
+        setForm({ nombre: '', fechaDeNacimiento: '', fechaDeFallecimiento: '', nacionalidad: '' }); 
+        load(); 
+      }
+      async function deleteAuthor(id) { 
+        if (!confirm('Eliminar autor ' + id + '?')) return; 
+        await fetch('/api/autores/' + id, { method: 'DELETE' }); 
+        load(); 
+      }
+      function scheduleSave(id, updated) { 
+        if (saves.current[id]) clearTimeout(saves.current[id]); 
+        saves.current[id] = setTimeout(async () => { 
+          await fetch('/api/autores/' + id, { 
+            method: 'PUT', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(updated) 
+          }); 
+          load(); 
+          delete saves.current[id]; 
+        }, 400); 
+      }
+      return (
+        <div>
+          <h3>Autores</h3>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Nombre</th><th>Fecha Nac.</th><th>Fecha Fallec.</th><th>Nacionalidad</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {list.map(a => (
+                <tr key={a.id}>
+                  <td>{a.id}</td>
+                  <td><input placeholder="Nombre" value={a.nombre || ''} onChange={e => { const u = { ...a, nombre: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input type="date" placeholder="Fecha Nac." value={a.fechaDeNacimiento || ''} onChange={e => { const u = { ...a, fechaDeNacimiento: e.target.value || null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input type="date" placeholder="Fecha Fallec." value={a.fechaDeFallecimiento || ''} onChange={e => { const u = { ...a, fechaDeFallecimiento: e.target.value || null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input placeholder="Nacionalidad" value={a.nacionalidad || ''} onChange={e => { const u = { ...a, nacionalidad: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><button onClick={() => deleteAuthor(a.id)}>Eliminar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h4>Agregar Autor</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Nombre</th><th>Fecha Nac.</th><th>Fecha Fallec.</th><th>Nacionalidad</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
+                <td><input type="date" value={form.fechaDeNacimiento} onChange={e => setForm({ ...form, fechaDeNacimiento: e.target.value })} /></td>
+                <td><input type="date" value={form.fechaDeFallecimiento} onChange={e => setForm({ ...form, fechaDeFallecimiento: e.target.value })} /></td>
+                <td><input placeholder="Nacionalidad" value={form.nacionalidad} onChange={e => setForm({ ...form, nacionalidad: e.target.value })} /></td>
+                <td><button onClick={add}>Agregar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function EditorialsManager() {
+      const [list, setList] = useState([]);
+      const [form, setForm] = useState({ nombre: '', pais: '', direccion: '', telefono: '', email: '' });
+      const saves = useRef({});
+      async function load() { const d = await safeFetchJson('/api/editoriales'); setList(Array.isArray(d) ? d : []); }
+      useEffect(() => { load(); }, []);
+      async function add() { await fetch('/api/editoriales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setForm({ nombre: '', pais: '', direccion: '', telefono: '', email: '' }); load(); }
+      async function deleteEditorial(id) { if (!confirm('Eliminar editorial ' + id + '?')) return; await fetch('/api/editoriales/' + id, { method: 'DELETE' }); load(); }
+      function scheduleSave(id, updated) { if (saves.current[id]) clearTimeout(saves.current[id]); saves.current[id] = setTimeout(async () => { await fetch('/api/editoriales/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); load(); delete saves.current[id]; }, 400); }
+      return (
+        <div>
+          <h3>Editoriales</h3>
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Nombre</th><th>País</th><th>Dirección</th><th>Teléfono</th><th>Email</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {list.map(e => (
+                <tr key={e.id}>
+                  <td>{e.id}</td>
+                  <td><input placeholder="Nombre" value={e.nombre || ''} onChange={ev => { const u = { ...e, nombre: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="País" value={e.pais || ''} onChange={ev => { const u = { ...e, pais: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Dirección" value={e.direccion || ''} onChange={ev => { const u = { ...e, direccion: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Teléfono" value={e.telefono || ''} onChange={ev => { const u = { ...e, telefono: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Email" value={e.email || ''} onChange={ev => { const u = { ...e, email: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><button onClick={() => deleteEditorial(e.id)}>Eliminar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <h4>Agregar Editorial</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Nombre</th><th>País</th><th>Dirección</th><th>Teléfono</th><th>Email</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
+                <td><input placeholder="País" value={form.pais} onChange={e => setForm({ ...form, pais: e.target.value })} /></td>
+                <td><input placeholder="Dirección" value={form.direccion} onChange={e => setForm({ ...form, direccion: e.target.value })} /></td>
+                <td><input placeholder="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} /></td>
+                <td><input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></td>
+                <td><button onClick={add}>Agregar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function EjemplaresManager() {
+      const [ejemplares, setEjemplares] = useState([]);
+      const [prestamos, setPrestamos] = useState([]);
+      const [libros, setLibros] = useState([]);
+      const loading = useRef(false);
+
+      async function loadAll() {
+        loading.current = true;
+        const [e, p, l] = await Promise.all([
+          safeFetchJson('/api/ejemplares') || [],
+          safeFetchJson('/api/prestamos') || [],
+          safeFetchJson('/api/libros') || []
+        ]);
+        setEjemplares(Array.isArray(e) ? e : []);
+        setPrestamos(Array.isArray(p) ? p : []);
+        setLibros(Array.isArray(l) ? l : []);
+        loading.current = false;
+      }
+
+      useEffect(() => { loadAll(); }, []);
+
+      // aggregate by libroId
+      const byLibro = () => {
+        const map = {};
+        libros.forEach(lb => { map[lb.id] = { libro: lb, total: 0, loaned: 0 }; });
+        ejemplares.forEach(ex => {
+          const id = String(ex.libroId);
+          if (!map[id]) map[id] = { libro: { id: ex.libroId, titulo: 'Unknown' }, total: 0, loaned: 0 };
+          map[id].total++;
+        });
+        prestamos.forEach(pr => {
+          if (pr.fechaDevolucion == null) {
+            const ej = ejemplares.find(x => String(x.id) === String(pr.ejemplarId));
+            if (ej) {
+              const id = String(ej.libroId);
+              if (!map[id]) map[id] = { libro: { id: ej.libroId, titulo: 'Unknown' }, total: 0, loaned: 0 };
+              map[id].loaned++;
+            }
+          }
+        });
+        return Object.values(map).sort((a,b) => (''+a.libro.titulo).localeCompare(''+b.libro.titulo));
+      };
+
+      async function increase(libroId) {
+        // create one ejemplar for libroId
+        await fetch('/api/ejemplares', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libroId }) });
+        await loadAll();
+      }
+
+      async function decrease(libroId) {
+        // delete one non-loaned ejemplar for libroId
+        // find an ejemplar not currently loaned
+        const loanedEjIds = new Set(prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
+        const candidate = ejemplares.find(ex => String(ex.libroId) === String(libroId) && !loanedEjIds.has(String(ex.id)));
+        const lib = libros.find(lb => String(lb.id) === String(libroId));
+        const libroTitle = lib ? lib.titulo : `Libro ${libroId}`;
+        if (!candidate) { alert('No hay ejemplares disponibles para eliminar (los existentes están prestados)'); return; }
+        if (!confirm('Eliminar ejemplar ' + candidate.id + ' del libro "' + libroTitle + '"?')) return;
+        await fetch('/api/ejemplares/' + candidate.id, { method: 'DELETE' });
+        await loadAll();
+      }
+
+      const rows = byLibro();
+
+      return (
+        <div>
+          <h3>Ejemplares por Libro</h3>
+          <table>
+            <thead>
+              <tr><th style={{ textAlign: 'left' }}>Libro</th><th>Total</th><th>Prestados</th><th>Disponibles</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.libro.id}>
+                  <td style={{ textAlign: 'left' }}>{r.libro.titulo}</td>
+                  <td>{r.total}</td>
+                  <td>{r.loaned}</td>
+                  <td>{Math.max(0, r.total - r.loaned)}</td>
+                  <td>
+                    <button onClick={() => increase(r.libro.id)} disabled={loading.current} style={{ marginRight: 6 }}>+</button>
+                    <button onClick={() => decrease(r.libro.id)} disabled={loading.current || (r.total - r.loaned) <= 0}>-</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {/*<div style={{ marginTop: 8 }}>
+            <button onClick={loadAll}>Actualizar</button>
+          </div>*/}
+        </div>
+      );
+    }
+
+    function BibliotecariosManager() {
+      const [list, setList] = useState([]);
+      const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '' });
+      const saves = useRef({});
+      async function load() { 
+        const d = await safeFetchJson('/api/bibliotecarios'); 
+        setList(Array.isArray(d) ? d : []); 
+      }
+      useEffect(() => { load(); }, []);
+      async function add() { 
+        // prepare payload converting numeric fields
+        const payload = { ...form };
+        if (payload.legajo !== '') payload.legajo = parseInt(payload.legajo);
+        if (payload.dni !== '') payload.dni = parseInt(payload.dni);
+        await fetch('/api/bibliotecarios', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
+        setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '' }); 
+        load(); 
+      }
+      async function deleteBibl(id) { 
+        if (!confirm('Eliminar bibliotecario ' + id + '?')) return; 
+        await fetch('/api/bibliotecarios/' + id, { method: 'DELETE' }); 
+        load(); 
+      }
+      function scheduleSave(id, updated) { 
+        if (saves.current[id]) clearTimeout(saves.current[id]); 
+        saves.current[id] = setTimeout(async () => { 
+          await fetch('/api/bibliotecarios/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); 
+          load(); 
+          delete saves.current[id]; 
+        }, 400); 
+      }
+      return (
+        <div>
+          <h3>Bibliotecarios</h3>
+          <table><thead><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Acciones</th></tr></thead>
+            <tbody>{list.map(b => (
+              <tr key={b.id}>
+                <td>{b.id}</td>
+                <td><input value={b.nombre || ''} onChange={e => { const u = { ...b, nombre: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.apellido || ''} onChange={e => { const u = { ...b, apellido: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.dni || ''} onChange={e => { const u = { ...b, dni: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.email || ''} onChange={e => { const u = { ...b, email: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} /></td>
+                <td><input value={b.telefono || ''} onChange={e => { const u = { ...b, telefono: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.legajo || ''} onChange={e => { const u = { ...b, legajo: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><button onClick={() => deleteBibl(b.id)}>Eliminar</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <h4>Agregar Bibliotecario</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
+                <td><input placeholder="Apellido" value={form.apellido} onChange={e => setForm({ ...form, apellido: e.target.value })} /></td>
+                <td><input placeholder="DNI" value={form.dni} onChange={e => setForm({ ...form, dni: e.target.value })} style={{ width: 90 }} /></td>
+                <td><input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={{ width: 150 }} /></td>
+                <td><input placeholder="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={{ width: 110 }} /></td>
+                <td><input placeholder="Legajo" value={form.legajo} onChange={e => setForm({ ...form, legajo: e.target.value })} style={{ width: 90 }} /></td>
+                <td><button onClick={add}>Agregar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function PrestamosManager() {
+      const [prestamos, setPrestamos] = useState([]);
+      const [clientes, setClientes] = useState([]);
+      const [ejemplares, setEjemplares] = useState([]);
+      const [libros, setLibros] = useState([]);
+      const saves = useRef({});
+
+      async function loadAll() {
+        const [p, c, ej, l] = await Promise.all([
+          safeFetchJson('/api/prestamos') || [],
+          safeFetchJson('/api/clientes') || [],
+          safeFetchJson('/api/ejemplares') || [],
+          safeFetchJson('/api/libros') || []
+        ]);
+        setPrestamos(Array.isArray(p) ? p : []);
+        setClientes(Array.isArray(c) ? c : []);
+        setEjemplares(Array.isArray(ej) ? ej : []);
+        setLibros(Array.isArray(l) ? l : []);
+      }
+
+      useEffect(() => { loadAll(); }, []);
+
+      const clienteById = (id) => (clientes.find(x => String(x.id) === String(id)));
+      const ejemplarById = (id) => (ejemplares.find(x => String(x.id) === String(id)));
+      const libroById = (id) => (libros.find(x => String(x.id) === String(id)));
+
+      const clienteNameFor = (clienteId) => {
+        const c = clienteById(clienteId);
+        if (!c) return String(clienteId);
+        const nombre = c.nombre || '';
+        const apellido = c.apellido || '';
+        const full = `${nombre} ${apellido}`.trim();
+        return full ? full : `Cliente ${c.id}`;
+      };
+
+      const ejemplarTitle = (ejId) => {
+        const ej = ejemplarById(ejId);
+        if (!ej) return String(ejId);
+        const lib = libroById(ej.libroId);
+        return lib ? `${lib.titulo} (ejemplar ${ej.id})` : `ejemplar ${ej.id}`;
+      };
+
+      async function deletePrestamo(id) { 
+        if (!confirm('Eliminar préstamo ' + id + '?')) return; 
+        await fetch('/api/prestamos/' + id, { method: 'DELETE' }); 
+        loadAll(); 
+      }
+
+      // Create new loan
+      const [newPrestamo, setNewPrestamo] = useState({ ejemplarId: '', clienteId: '', fechaInicio: '', fechaDevolucion: null });
+      async function createPrestamo() {
+        const payload = { ...newPrestamo };
+        if (payload.ejemplarId === '' || payload.clienteId === '' || payload.fechaInicio === '') { alert('Complete ejemplar, cliente y fecha de inicio'); return; }
+        payload.ejemplarId = parseInt(payload.ejemplarId);
+        payload.clienteId = parseInt(payload.clienteId);
+        if (payload.fechaDevolucion === '') payload.fechaDevolucion = null;
+        await fetch('/api/prestamos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        setNewPrestamo({ ejemplarId: '', clienteId: '', fechaInicio: '', fechaDevolucion: null });
+        loadAll();
+      }
+
+      function scheduleSavePrestamo(id, updated) {
+        if (saves.current[id]) clearTimeout(saves.current[id]);
+        saves.current[id] = setTimeout(async () => { 
+          await fetch('/api/prestamos/' + id, { 
+            method: 'PUT', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(updated) 
+          }); 
+          loadAll(); 
+          delete saves.current[id]; 
+        }, 500);
+      }
+
+      return (
+        <div>
+          <h3>Préstamos</h3>
+          <table>
+            <thead><tr><th>ID</th><th style={{ textAlign: 'left' }}>Ejemplar</th><th>Cliente</th><th>Inicio</th><th>Devolución</th><th>Acciones</th></tr></thead>
+            <tbody>{prestamos.map(p => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td style={{ textAlign: 'left' }}>{ejemplarTitle(p.ejemplarId)}</td>
+                <td>{clienteNameFor(p.clienteId)}</td>
+                <td>{formatDate(p.fechaInicio)}</td>
+                {(p.fechaDevolucion === null) ?
+                <td>
+                  <input type="date" value={p.fechaDevolucion || ''} onChange={e => {
+                    const val = e.target.value || null;
+                    const updated = { ...p, fechaDevolucion: val };
+                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
+                    scheduleSavePrestamo(p.id, updated);
+                  }} />
+                </td> : <td>{formatDate(p.fechaDevolucion)}</td>}
+                <td><button onClick={() => deletePrestamo(p.id)}>Eliminar</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
+          <h4>Agregar Préstamo</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Ejemplar</th><th>Cliente</th><th>Fecha Inicio</th><th>Fecha Devolución</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <select value={newPrestamo.ejemplarId} onChange={e => setNewPrestamo({ ...newPrestamo, ejemplarId: e.target.value })}>
+                    <option value="">Seleccione ejemplar</option>
+                    {(() => {
+                      // Compute ejemplares that are not currently loaned (fechaDevolucion == null)
+                      const loanedEjIds = new Set(prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
+                      return ejemplares.filter(ej => !loanedEjIds.has(String(ej.id))).map(ej => {
+                        const lib = libros.find(lb => String(lb.id) === String(ej.libroId));
+                        const title = lib ? lib.titulo : (`Libro ${ej.libroId}`);
+                        return <option key={ej.id} value={ej.id}>{`Ej ${ej.id} - ${title}`}</option>;
+                      });
+                    })()}
+                  </select>
+                </td>
+                <td>
+                  <select value={newPrestamo.clienteId} onChange={e => setNewPrestamo({ ...newPrestamo, clienteId: e.target.value })}>
+                    <option value="">Seleccione cliente</option>
+                    {clientes.map(c => <option key={c.id} value={c.id}>{(c.nombre||'') + ' ' + (c.apellido||'') || (`Cliente ${c.id}`)}</option>)}
+                  </select>
+                </td>
+                <td><input type="date" value={newPrestamo.fechaInicio} onChange={e => setNewPrestamo({ ...newPrestamo, fechaInicio: e.target.value })} /></td>
+                <td><input type="date" value={newPrestamo.fechaDevolucion || ''} onChange={e => setNewPrestamo({ ...newPrestamo, fechaDevolucion: e.target.value })} /></td>
+                <td><button onClick={createPrestamo}>Crear Préstamo</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    function BibliotecaManager() {
+      const [biblio, setBiblio] = useState(null);
+      const [loading, setLoading] = useState(false);
+
+      async function load() {
+        const d = await safeFetchJson('/api/bibliotecas') || [];
+        setBiblio(Array.isArray(d) && d.length > 0 ? d[0] : { nombre: '', direccion: '', telefono: '', email: '', administradorId: null });
+      }
+
+      useEffect(() => { load(); }, []);
+
+      async function save() {
+        setLoading(true);
+        try {
+          if (biblio.id) {
+            await fetch('/api/bibliotecas/' + biblio.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
+          } else {
+            const res = await fetch('/api/bibliotecas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
+            const created = await res.json();
+            setBiblio(created);
+          }
+          await load();
+          alert('Guardado');
+        } catch (e) { alert('Error al guardar'); }
+        setLoading(false);
+      }
+
+      if (!biblio) return <div>Cargando...</div>;
+
+      return (
+        <div>
+          <h3>Biblioteca</h3>
+          <table>
+            <tbody>
+              <tr><td>Nombre</td><td><input value={biblio.nombre || ''} onChange={e => setBiblio({ ...biblio, nombre: e.target.value })} /></td></tr>
+              <tr><td>Dirección</td><td><input value={biblio.direccion || ''} onChange={e => setBiblio({ ...biblio, direccion: e.target.value })} /></td></tr>
+              <tr><td>Teléfono</td><td><input value={biblio.telefono || ''} onChange={e => setBiblio({ ...biblio, telefono: e.target.value })} /></td></tr>
+              <tr><td>Email</td><td><input value={biblio.email || ''} onChange={e => setBiblio({ ...biblio, email: e.target.value })} /></td></tr>
+              <tr><td>Administrador (id)</td><td><input value={biblio.administradorId || ''} onChange={e => setBiblio({ ...biblio, administradorId: e.target.value ? parseInt(e.target.value) : null })} /></td></tr>
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8 }}>
+            <button onClick={save} disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</button>
+          </div>
+        </div>
+      );
+    }
+
+    function ClientesManager() {
+      const [clientes, setClientes] = useState([]);
+      const saves = useRef({});
+      const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '', reservedBooks: 0 });
+
+      async function loadAll() {
+        const c = await safeFetchJson('/api/clientes') || [];
+        setClientes(Array.isArray(c) ? c : []);
+      }
+
+      useEffect(() => { loadAll(); }, []);
+
+      async function deleteCliente(id) { if (!confirm('Eliminar cliente ' + id + '?')) return; await fetch('/api/clientes/' + id, { method: 'DELETE' }); loadAll(); }
+
+      async function addCliente() {
+        const payload = { ...form };
+        if (payload.legajo === '') payload.legajo = null; else payload.legajo = parseInt(payload.legajo);
+        if (payload.dni === '') payload.dni = null; else payload.dni = parseInt(payload.dni);
+        payload.reservedBooks = parseInt(payload.reservedBooks || 0);
+        await fetch('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '', reservedBooks: 0 });
+        loadAll();
+      }
+
+      function scheduleSaveCliente(id, updated) {
+        if (saves.current['c'+id]) clearTimeout(saves.current['c'+id]);
+        saves.current['c'+id] = setTimeout(async () => { 
+          await fetch('/api/clientes/' + id, { 
+            method: 'PUT', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(updated) }
+          ); 
+          loadAll(); 
+          delete saves.current['c'+id]; 
+        }, 500);
+      }
+
+      return (
+        <div>
+          <h3>Clientes</h3>
+          <table>
+            <thead><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Libros Reservados</th><th>Acciones</th></tr></thead>
+            <tbody>{clientes.map(c => {
+              return (
+                <tr key={c.id}>
+                  <td>{c.id}</td>
+                  <td><input value={c.nombre || ''} onChange={e => { 
+                    const updated = { ...c, nombre: e.target.value }; 
+                    setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); 
+                    scheduleSaveCliente(c.id, updated); 
+                  }} style={{ width: 80 }} /></td>
+                  <td><input value={c.apellido || ''} onChange={e => { 
+                    const updated = { ...c, apellido: e.target.value }; 
+                    setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); 
+                    scheduleSaveCliente(c.id, updated); 
+                  }} style={{ width: 80 }} /></td>
+                  <td><input value={c.dni || ''} onChange={e => { const updated = { ...c, dni: parseInt(e.target.value || 0) }; setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); scheduleSaveCliente(c.id, updated); }} style={{ width: 90 }} /></td>
+                  <td><input value={c.email || ''} onChange={e => { const updated = { ...c, email: e.target.value }; setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); scheduleSaveCliente(c.id, updated); }} /></td>
+                  <td><input value={c.telefono || ''} onChange={e => { const updated = { ...c, telefono: e.target.value }; setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); scheduleSaveCliente(c.id, updated); }} style={{ width: 80 }} /></td>
+                  <td><input value={c.legajo || ''} onChange={e => { const updated = { ...c, legajo: parseInt(e.target.value || 0) }; setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); scheduleSaveCliente(c.id, updated); }} style={{ width: 80 }} /></td>
+                  <td><input value={c.reservedBooks || 0} type="number" onChange={e => { const updated = { ...c, reservedBooks: parseInt(e.target.value || 0) }; setClientes(prev => prev.map(x => x.id === c.id ? updated : x)); scheduleSaveCliente(c.id, updated); }} style={{ width: 50 }} /></td>
+                  <td><button onClick={() => deleteCliente(c.id)}>Eliminar</button></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+          <h4>Agregar Cliente</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Reservados</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
+                <td><input placeholder="Apellido" value={form.apellido} onChange={e => setForm({ ...form, apellido: e.target.value })} /></td>
+                <td><input placeholder="DNI" value={form.dni} onChange={e => setForm({ ...form, dni: e.target.value })} style={{ width: 90 }} /></td>
+                <td><input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={{ width: 150 }} /></td>
+                <td><input placeholder="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={{ width: 110 }} /></td>
+                <td><input placeholder="Legajo" value={form.legajo} onChange={e => setForm({ ...form, legajo: e.target.value })} style={{ width: 90 }} /></td>
+                <td><input type="number" placeholder="Reservados" value={form.reservedBooks} onChange={e => setForm({ ...form, reservedBooks: e.target.value })} style={{ width: 110 }} /></td>
+                <td><button onClick={addCliente}>Agregar</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+
+</html>

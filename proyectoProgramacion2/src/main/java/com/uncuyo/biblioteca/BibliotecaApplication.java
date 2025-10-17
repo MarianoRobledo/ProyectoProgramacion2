@@ -30,7 +30,9 @@ public class BibliotecaApplication {
     public CommandLineRunner initDatabase(DataSource dataSource) {
         return args -> {
             // Ensure parent directory for SQLite file exists and reset DB file to start clean
+            ///home/mariano/repositorios/ProyectoProgramacion2/proyectoProgramacion2/database/biblioteca.db"
             java.nio.file.Path dbDir = java.nio.file.Paths.get("database");
+            dbDir = dbDir.toAbsolutePath();
             try {
                 java.nio.file.Files.createDirectories(dbDir);
             } catch (Exception e) {
@@ -41,6 +43,7 @@ public class BibliotecaApplication {
             boolean wiped = false;
 
             // Try to delete the file
+            /*
             try {
                 boolean deleted = java.nio.file.Files.deleteIfExists(dbFile);
                 if (deleted) {
@@ -52,16 +55,20 @@ public class BibliotecaApplication {
             } catch (Exception ex) {
                 log.warn("Could not delete existing DB file (it may be locked): {}", ex.getMessage());
             }
-
+             */
+            
             // If file deletion didn't occur, try to wipe all tables via JDBC
             if (!wiped) {
                 log.info("Attempting in-database wipe (DROP TABLE) since file delete did not occur or DB file exists");
-                String[] tables = new String[] {
-                        "prestamo", "ejemplar", "libro", "biblioteca", "bibliotecario", "persona", "cliente", "editorial", "autor"
+                String[] tables = new String[]{
+                    "prestamo", "ejemplar", "libro", "biblioteca", "bibliotecario", "persona", "cliente", "editorial", "autor"
                 };
                 try (java.sql.Connection conn = dataSource.getConnection(); java.sql.Statement stmt = conn.createStatement()) {
                     // disable foreign keys enforcement while dropping
-                    try { stmt.execute("PRAGMA foreign_keys = OFF"); } catch (Exception ignore) {}
+                    try {
+                        stmt.execute("PRAGMA foreign_keys = OFF");
+                    } catch (Exception ignore) {
+                    }
                     for (String t : tables) {
                         try {
                             stmt.executeUpdate("DROP TABLE IF EXISTS " + t);
@@ -70,7 +77,10 @@ public class BibliotecaApplication {
                             log.warn("Could not drop table {}: {}", t, ex.getMessage());
                         }
                     }
-                    try { stmt.execute("PRAGMA foreign_keys = ON"); } catch (Exception ignore) {}
+                    try {
+                        stmt.execute("PRAGMA foreign_keys = ON");
+                    } catch (Exception ignore) {
+                    }
                     wiped = true;
                     log.info("In-database wipe finished");
                 } catch (Exception ex) {

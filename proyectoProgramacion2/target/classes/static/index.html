@@ -138,68 +138,185 @@
       return <div>Rol desconocido.</div>;
     }
 
-    function ClientView({ client }) {
-      const [prestamos, setPrestamos] = useState([]);
-      const [ejemplares, setEjemplares] = useState([]);
-      const [libros, setLibros] = useState([]);
-      const saves = useRef({});
+function ClientView({ client }) {
+  const [prestamos, setPrestamos] = useState([]);
+  const [ejemplares, setEjemplares] = useState([]);
+  const [libros, setLibros] = useState([]);
+  const [busqueda, setBusqueda] = useState('');
+  const [resultados, setResultados] = useState([]);
+  const saves = useRef({});
 
-      function clientIdFromObject(obj) { return obj.id || obj.legajo || obj.dni; }
+  async function loadAll() {
+    const [allPrest, allEj, allLib] = await Promise.all([
+      safeFetchJson('/api/prestamos') || [],
+      safeFetchJson('/api/ejemplares') || [],
+      safeFetchJson('/api/libros') || []
+    ]);
+    const mine = (Array.isArray(allPrest) ? allPrest : []).filter(
+      p => String(p.clienteId) === String(client.id)
+    );
+    setPrestamos(mine);
+    setEjemplares(Array.isArray(allEj) ? allEj : []);
+    setLibros(Array.isArray(allLib) ? allLib : []);
+  }
 
-      async function loadAll() {
-        const [allPrest, allEj, allLib] = await Promise.all([
-          safeFetchJson('/api/prestamos') || [],
-          safeFetchJson('/api/ejemplares') || [],
-          safeFetchJson('/api/libros') || []
-        ]);
-        const mine = (Array.isArray(allPrest) ? allPrest : []).filter(p => String(p.clienteId) === String(client.id || clientIdFromObject(client)));
-        setPrestamos(mine);
-        setEjemplares(Array.isArray(allEj) ? allEj : []);
-        setLibros(Array.isArray(allLib) ? allLib : []);
-      }
+  useEffect(() => { if (client) loadAll(); }, [client]);
 
-      useEffect(() => { if (client) loadAll(); }, [client]);
+  const ejemplarTitle = (ejId) => {
+    const ej = ejemplares.find(e => String(e.id) === String(ejId));
+    if (!ej) return String(ejId);
+    const lib = libros.find(l => String(l.id) === String(ej.libroId));
+    return lib ? `${lib.titulo} (ejemplar ${ej.id})` : `ejemplar ${ej.id}`;
+  };
 
-      const ejemplarTitle = (ejId) => {
-        const ej = ejemplares.find(e => String(e.id) === String(ejId));
-        if (!ej) return String(ejId);
-        const lib = libros.find(l => String(l.id) === String(ej.libroId));
-        return lib ? `${lib.titulo} (ejemplar ${ej.id})` : `ejemplar ${ej.id}`;
-      };
+  // 🔍 Buscar libros similares al texto ingresado
+  const buscarLibros = debounce((texto) => {
+    if (!texto) { setResultados([]); return; }
+    const q = texto.toLowerCase();
+    const coincidencias = libros.filter(l => (l.titulo || '').toLowerCase().includes(q));
+    setResultados(coincidencias);
+  }, 400);
 
-      const savePrestamo = (id, updated) => {
-        // Debounce per id
-        if (saves.current[id]) clearTimeout(saves.current[id]);
-        saves.current[id] = setTimeout(async () => {
-          await fetch('/api/prestamos/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-          loadAll();
-        }, 500);
-      };
+  // 📘 Función para pedir un libro (si hay ejemplar libre)
+  async function pedirLibro(libroId) {
+    const loanedEjIds = new Set(
+      prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId))
+    );
+    const libre = ejemplares.find(
+      e => String(e.libroId) === String(libroId) && !loanedEjIds.has(String(e.id))
+    );
+    if (!libre) { alert('No hay ejemplares disponibles.'); return; }
 
-      return (
-        <div>
-          <p>Préstamos de: {client.nombre} {client.apellido}</p>
-          <table><thead><tr><th>ID</th><th style={{textAlign: 'left'}}>Libro / Ejemplar</th><th>Inicio</th><th>Devolución</th></tr></thead>
-            <tbody>{prestamos.map(p => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td style={{textAlign: 'left'}}>{ejemplarTitle(p.ejemplarId)}</td>
-                <td>{formatDate(p.fechaInicio)}</td>
-                {(p.fechaDevolucion != null) ? (<td>{formatDate(p.fechaDevolucion)}</td>) : (<td>--</td>)}
-                {/*<td>
-                  <input type="date" value={p.fechaDevolucion || ''} onChange={e => {
-                    const val = e.target.value || null;
-                    const updated = { ...p, fechaDevolucion: val };
-                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
-                    savePrestamo(p.id, updated);
-                  }} />
-                </td>*/}
-              </tr>
-            ))}</tbody>
-          </table>
+    const nuevo = {
+      ejemplarId: libre.id,
+      clienteId: client.id,
+      fechaInicio: new Date().toISOString().split('T')[0],
+      fechaDevolucion: null
+    };
+
+    await fetch('/api/prestamos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(nuevo)
+    });
+    alert('Libro solicitado con éxito 📚');
+    loadAll();
+  }
+
+  // 🔁 Renovar préstamo (ej: suma 7 días a la fechaInicio)
+  async function renovarPrestamo(p) {
+    if (p.fechaDevolucion) { alert('No se puede renovar un préstamo ya devuelto.'); return; }
+
+    const nuevaFecha = new Date(p.fechaInicio);
+    nuevaFecha.setDate(nuevaFecha.getDate() + 7);
+
+    const actualizado = { ...p, fechaInicio: nuevaFecha.toISOString().split('T')[0] };
+
+    await fetch('/api/prestamos/' + p.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(actualizado)
+    });
+    alert('Préstamo renovado por 7 días más 📅');
+    loadAll();
+  }
+
+  // 🔙 Devolver libro (colocar fecha actual)
+  async function devolverPrestamo(p) {
+    if (p.fechaDevolucion) { alert('Ya fue devuelto.'); return; }
+    const actualizado = { ...p, fechaDevolucion: new Date().toISOString().split('T')[0] };
+
+    await fetch('/api/prestamos/' + p.id, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(actualizado)
+    });
+    alert('Libro devuelto ✅');
+    loadAll();
+  }
+
+  return (
+    <div>
+      <h2>Bienvenido, {client.nombre} {client.apellido}</h2>
+
+      {/* 📋 Tabla de préstamos actuales */}
+      <h3>Mis préstamos</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th style={{ textAlign: 'left' }}>Libro / Ejemplar</th>
+            <th>Inicio</th>
+            <th>Devolución</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {prestamos.map(p => (
+            <tr key={p.id}>
+              <td>{p.id}</td>
+              <td style={{ textAlign: 'left' }}>{ejemplarTitle(p.ejemplarId)}</td>
+              <td>{formatDate(p.fechaInicio)}</td>
+              <td>{p.fechaDevolucion ? formatDate(p.fechaDevolucion) : '--'}</td>
+              <td>
+                <button onClick={() => renovarPrestamo(p)} disabled={!!p.fechaDevolucion}>Renovar</button>
+                <button onClick={() => devolverPrestamo(p)} disabled={!!p.fechaDevolucion} style={{ marginLeft: 6 }}>Devolver</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* 🔍 Buscador de libros */}
+      <h3 style={{ marginTop: 24 }}>Buscar libros</h3>
+      <input
+        type="text"
+        placeholder="Escriba el nombre del libro..."
+        value={busqueda}
+        onChange={e => {
+          setBusqueda(e.target.value);
+          buscarLibros(e.target.value);
+        }}
+        style={{ width: '60%', padding: 6 }}
+      />
+
+      {/* 📚 Resultados */}
+      {busqueda && (
+        <div style={{ marginTop: 16 }}>
+          <h4>Resultados:</h4>
+          {resultados.length === 0 ? (
+            <p>No se encontraron libros.</p>
+          ) : (
+            <ul>
+              {resultados.map(l => {
+                const loanedEjIds = new Set(
+                  prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId))
+                );
+                const libres = ejemplares.filter(
+                  e => String(e.libroId) === String(l.id) && !loanedEjIds.has(String(e.id))
+                );
+                const disponible = libres.length > 0;
+
+                return (
+                  <li key={l.id} style={{ marginBottom: 8 }}>
+                    <strong>{l.titulo}</strong> — ISBN: {l.isbn || 'sin datos'}<br />
+                    {disponible ? (
+                      <button onClick={() => pedirLibro(l.id)}>📖 Pedir</button>
+                    ) : (
+                      <span style={{ color: 'gray' }}>No disponible</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
-      );
-    }
+      )}
+    </div>
+  );
+}
+
+
 
     function BibliotecarioView({ user }) {
       const [view, setView] = useState('prestamos');

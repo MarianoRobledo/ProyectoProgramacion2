@@ -37,45 +37,27 @@ public class BibliotecaApplication {
                 log.warn("Could not ensure database directory: {}", e.getMessage());
             }
 
-            java.nio.file.Path dbFile = dbDir.resolve("biblioteca.db");
-            boolean wiped = false;
-
-            // Try to delete the file
-            try {
-                boolean deleted = java.nio.file.Files.deleteIfExists(dbFile);
-                if (deleted) {
-                    wiped = true;
-                    log.info("Deleted existing DB file to perform reset: {}", dbFile.toAbsolutePath());
-                } else {
-                    log.info("No existing DB file to delete: {}", dbFile.toAbsolutePath());
-                }
-            } catch (Exception ex) {
-                log.warn("Could not delete existing DB file (it may be locked): {}", ex.getMessage());
-            }
-
-            // If file deletion didn't occur, try to wipe all tables via JDBC
-            if (!wiped) {
-                log.info("Attempting in-database wipe (DROP TABLE) since file delete did not occur or DB file exists");
-                String[] tables = new String[] {
-                        "prestamo", "ejemplar", "libro", "biblioteca", "bibliotecario", "persona", "cliente", "editorial", "autor"
-                };
-                try (java.sql.Connection conn = dataSource.getConnection(); java.sql.Statement stmt = conn.createStatement()) {
-                    // disable foreign keys enforcement while dropping
-                    try { stmt.execute("PRAGMA foreign_keys = OFF"); } catch (Exception ignore) {}
-                    for (String t : tables) {
-                        try {
-                            stmt.executeUpdate("DROP TABLE IF EXISTS " + t);
-                            log.debug("Dropped table if existed: {}", t);
-                        } catch (Exception ex) {
-                            log.warn("Could not drop table {}: {}", t, ex.getMessage());
-                        }
+            log.info("Starting in-database wipe (DROP TABLE)");
+            String[] tables = new String[] {
+                    "prestamo", "ejemplar", "libro", "biblioteca", 
+                    "bibliotecario", "persona", "cliente", "editorial", "autor"
+            };
+            try (java.sql.Connection conn = dataSource.getConnection(); 
+                 java.sql.Statement stmt = conn.createStatement()) {
+                // disable foreign keys enforcement while dropping
+                try { stmt.execute("PRAGMA foreign_keys = OFF"); } catch (Exception ignore) {}
+                for (String t : tables) {
+                    try {
+                        stmt.executeUpdate("DROP TABLE IF EXISTS " + t);
+                        log.debug("Dropped table if existed: {}", t);
+                    } catch (Exception ex) {
+                        log.warn("Could not drop table {}: {}", t, ex.getMessage());
                     }
-                    try { stmt.execute("PRAGMA foreign_keys = ON"); } catch (Exception ignore) {}
-                    wiped = true;
-                    log.info("In-database wipe finished");
-                } catch (Exception ex) {
-                    log.warn("In-database wipe failed: {}", ex.getMessage());
                 }
+                try { stmt.execute("PRAGMA foreign_keys = ON"); } catch (Exception ignore) {}
+                log.info("In-database wipe finished");
+            } catch (Exception ex) {
+                log.warn("In-database wipe failed: {}", ex.getMessage());
             }
 
             // Run schema.sql then data.sql to recreate schema and load seed data

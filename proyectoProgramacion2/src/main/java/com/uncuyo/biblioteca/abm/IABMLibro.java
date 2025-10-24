@@ -8,4 +8,5 @@ public interface IABMLibro {
     Libro modificarLibro(Libro l);
     void eliminarLibro(Long id);
     List<Libro> consultarLibros();
+    Libro consultarLibro();
 }

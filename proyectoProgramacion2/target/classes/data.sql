@@ -7,9 +7,9 @@ INSERT INTO editorial(nombre,pais,direccion,telefono,email) VALUES('Editorial Do
 INSERT INTO editorial(nombre,pais,direccion,telefono,email) VALUES('Editorial Tres','Uruguay','Rambla 10','111222','tres@example.com');
 
 -- Authors
-INSERT INTO autor(nombre,fechaDeNacimiento,nacionalidad) VALUES('Gabriel Garcia','1927-03-06','Colombiana');
-INSERT INTO autor(nombre,fechaDeNacimiento,nacionalidad) VALUES('Jorge Luis Borges','1899-08-24','Argentina');
-INSERT INTO autor(nombre,fechaDeNacimiento,nacionalidad) VALUES('Isabel Allende','1942-08-02','Chilena');
+INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES('Gabriel Garcia','1927-03-06','Colombiana');
+INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES('Jorge Luis Borges','1899-08-24','Argentina');
+INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES('Isabel Allende','1942-08-02','Chilena');
 
 -- Books
 INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id,disponible) VALUES('978-1','Cien Años de Soledad',1,1967,1,1);

@@ -8,4 +8,5 @@ public interface IABMPrestamo {
     Prestamo modificarPrestamo(Prestamo p);
     void eliminarPrestamo(Long id);
     List<Prestamo> consultarPrestamos();
+    Prestamo consultarPrestamo();
 }

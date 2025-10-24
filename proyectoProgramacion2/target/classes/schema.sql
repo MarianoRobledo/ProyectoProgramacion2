@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS editorial (
 CREATE TABLE IF NOT EXISTS autor (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   nombre TEXT NOT NULL,
-  fechaDeNacimiento TEXT,
   fechaDeFallecimiento TEXT,
   nacionalidad TEXT
 );
@@ -26,6 +25,7 @@ CREATE TABLE IF NOT EXISTS libro (
   anioPublicacion INTEGER,
   autor_id INTEGER,
   disponible INTEGER DEFAULT 1,
+  visible BOOLEAN DEFAULT TRUE,
   FOREIGN KEY(editorial_id) REFERENCES editorial(id),
   FOREIGN KEY(autor_id) REFERENCES autor(id)
 );

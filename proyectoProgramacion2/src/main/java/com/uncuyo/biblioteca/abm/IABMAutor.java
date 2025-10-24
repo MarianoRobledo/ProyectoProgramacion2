@@ -8,4 +8,5 @@ public interface IABMAutor {
     Autor modificarAutor(Autor a);
     void eliminarAutor(Long id);
     List<Autor> consultarAutores();
+    Autor consultarAutor();
 }

@@ -18,13 +18,13 @@ public class AdministradorController {
     public List<Administrador> list() { return service.consultarAdministradores(); }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Administrador> get(@PathVariable Long id) { Administrador a = service.get(id); if (a == null) return ResponseEntity.notFound().build(); return ResponseEntity.ok(a); }
+    public ResponseEntity<Administrador> get(@PathVariable Integer id) { Administrador a = service.consultarAdministrador(id); if (a == null) return ResponseEntity.notFound().build(); return ResponseEntity.ok(a); }
 
     @PostMapping
-    public Administrador create(@RequestBody Administrador a) { return service.agregarAdministrador(a); }
+    public Administrador create(@RequestBody Administrador a) { return service.agregar(a); }
 
     @PutMapping("/{id}")
-    public Administrador update(@PathVariable Long id, @RequestBody Administrador a) { /* prefer to update by id if model exposes it */ return service.modificarAdministrador(a); }
+    public Administrador update(@PathVariable Long id, @RequestBody Administrador a) { /* prefer to update by id if model exposes it */ return service.modificar(a); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarAdministrador(id); return ResponseEntity.noContent().build(); }

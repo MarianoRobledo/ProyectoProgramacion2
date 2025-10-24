@@ -6,6 +6,7 @@ public abstract class Persona {
     protected String apellido;
     protected String email;
     protected String telefono;
+    protected String fechaNacimiento;
 
     public Integer getDni() {
         return dni;
@@ -46,4 +47,14 @@ public abstract class Persona {
     public void setTelefono(String telefono) {
         this.telefono = telefono;
     }
+
+    public String getFechaNacimiento() {
+        return fechaNacimiento;
+    }
+
+    public void setFechaNacimiento(String fechaNacimiento) {
+        this.fechaNacimiento = fechaNacimiento;
+    }
+    
+    
 }

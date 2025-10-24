@@ -1,7 +1,7 @@
 package com.uncuyo.biblioteca.controller;
 
 import com.uncuyo.biblioteca.model.Prestamo;
-import com.uncuyo.biblioteca.service.PrestamoService;
+import com.uncuyo.biblioteca.service.*;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,17 +10,17 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/prestamos")
 public class PrestamoController {
-    private final PrestamoService service;
+    private final AdministradorService service;
 
-    public PrestamoController(PrestamoService service) { this.service = service; }
+    public PrestamoController(AdministradorService service) { this.service = service; }
 
     @GetMapping
-    public List<Prestamo> list() { return service.list(); }
+    public List<Prestamo> list() { return service.consultarPrestamos(); }
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody Prestamo p) {
         try {
-            Prestamo result = service.create(p);
+            Prestamo result = service.agregar(p);
             return ResponseEntity.ok(result);
         } catch (IllegalStateException ex) {
             return ResponseEntity.badRequest().body(ex.getMessage());
@@ -39,7 +39,7 @@ public class PrestamoController {
     @PutMapping("/{id}")
     public ResponseEntity<Prestamo> update(@PathVariable Long id, @RequestBody Prestamo p) {
         p.setId(id);
-        Prestamo updated = service.modificarPrestamo(p);
+        Prestamo updated = service.modificar(p);
         return ResponseEntity.ok(updated);
     }
 }

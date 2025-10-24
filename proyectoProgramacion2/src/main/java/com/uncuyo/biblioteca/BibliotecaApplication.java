@@ -39,7 +39,7 @@ public class BibliotecaApplication {
 
             java.nio.file.Path dbFile = dbDir.resolve("biblioteca.db");
             boolean wiped = false;
-
+/*
             // Try to delete the file
             try {
                 boolean deleted = java.nio.file.Files.deleteIfExists(dbFile);
@@ -52,7 +52,7 @@ public class BibliotecaApplication {
             } catch (Exception ex) {
                 log.warn("Could not delete existing DB file (it may be locked): {}", ex.getMessage());
             }
-
+*/
             // If file deletion didn't occur, try to wipe all tables via JDBC
             if (!wiped) {
                 log.info("Attempting in-database wipe (DROP TABLE) since file delete did not occur or DB file exists");

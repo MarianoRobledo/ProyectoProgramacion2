@@ -17,7 +17,6 @@ public class AutorRepository {
         Autor a = new Autor();
         a.setId(rs.getLong("id"));
         a.setNombre(rs.getString("nombre"));
-        a.setFechaDeNacimiento(rs.getString("fechaDeNacimiento"));
         a.setFechaDeFallecimiento(rs.getString("fechaDeFallecimiento"));
         a.setNacionalidad(rs.getString("nacionalidad"));
         return a;
@@ -29,14 +28,14 @@ public class AutorRepository {
 
     public Autor save(Autor a) {
         if (a.getId() == null) {
-            jdbc.update("INSERT INTO autor(nombre,fechaDeNacimiento,fechaDeFallecimiento,nacionalidad) VALUES(?,?,?,?)",
-                    a.getNombre(), a.getFechaDeNacimiento(), a.getFechaDeFallecimiento(), a.getNacionalidad());
+            jdbc.update("INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES(?,?,?)",
+                    a.getNombre(), a.getFechaDeFallecimiento(), a.getNacionalidad());
             Long id = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
             a.setId(id);
             return a;
         } else {
-            jdbc.update("UPDATE autor SET nombre=?, fechaDeNacimiento=?, fechaDeFallecimiento=?, nacionalidad=? WHERE id=?",
-                    a.getNombre(), a.getFechaDeNacimiento(), a.getFechaDeFallecimiento(), a.getNacionalidad(), a.getId());
+            jdbc.update("UPDATE autor SET nombre=?, fechaDeFallecimiento=?, nacionalidad=? WHERE id=?",
+                    a.getNombre(), a.getFechaDeFallecimiento(), a.getNacionalidad(), a.getId());
             return a;
         }
     }

@@ -42,7 +42,7 @@ public class AdministradorRepository {
     }
 
     public Administrador save(Administrador a) {
-        if (a.getLegajo() == null) {
+        if (a.getLegajo() == -1) {// hay que ver porque ahora no puede ser none, tiene que ser un valor inicial como -1 para saber que no existe.
             // treat as new admin: insert persona then bibliotecario with is_admin=1
             jdbc.update("INSERT INTO persona(nombre,apellido,fechaNacimiento,telefono,email,dni) VALUES(?,?,?,?,?,?)",
                     a.getNombre(), a.getApellido(), a.getFechaNacimiento(), a.getTelefono(), a.getEmail(), a.getDni());

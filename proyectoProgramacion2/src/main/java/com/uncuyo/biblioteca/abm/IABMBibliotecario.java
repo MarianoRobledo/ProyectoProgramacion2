@@ -1,11 +1,19 @@
 package com.uncuyo.biblioteca.abm;
 
 import com.uncuyo.biblioteca.model.Bibliotecario;
+import com.uncuyo.biblioteca.model.Cliente;
+import com.uncuyo.biblioteca.model.Prestamo;
 import java.util.List;
 
 public interface IABMBibliotecario {
-    Bibliotecario agregarBibliotecario(Bibliotecario b);
-    Bibliotecario modificarBibliotecario(Bibliotecario b);
-    void eliminarBibliotecario(Long id);
-    List<Bibliotecario> consultarBibliotecarios();
+        
+    Cliente agregar(Cliente c);
+    Cliente modificar(Cliente c);
+    void eliminarCliente(Long id);
+    List<Cliente> consultarClientes();
+    
+    Prestamo agregar(Prestamo p);
+    Prestamo modificar(Prestamo p);
+    void eliminarPrestamo(Long id);
+    List<Prestamo> consultarPrestamos();
 }

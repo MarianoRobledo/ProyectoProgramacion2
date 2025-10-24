@@ -1,6 +1,7 @@
 package com.uncuyo.biblioteca.abm;
 
 import com.uncuyo.biblioteca.model.Editorial;
+import com.uncuyo.biblioteca.model.Prestamo;
 import java.util.List;
 
 public interface IABMEditorial {
@@ -8,4 +9,5 @@ public interface IABMEditorial {
     Editorial modificarEditorial(Editorial e);
     void eliminarEditorial(Long id);
     List<Editorial> consultarEditoriales();
+    Editorial consultarEditoriale();
 }

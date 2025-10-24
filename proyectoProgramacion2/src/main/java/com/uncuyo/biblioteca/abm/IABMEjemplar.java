@@ -8,4 +8,5 @@ public interface IABMEjemplar {
     Ejemplar modificarEjemplar(Ejemplar e);
     void eliminarEjemplar(Long id);
     List<Ejemplar> consultarEjemplares();
+    Ejemplar consultarEjemplarer();
 }

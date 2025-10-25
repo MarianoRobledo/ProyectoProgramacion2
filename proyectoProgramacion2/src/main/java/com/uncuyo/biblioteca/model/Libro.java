@@ -8,6 +8,7 @@ public class Libro {
     private Integer anioPublicacion;
     private Long autorId;
     private Boolean disponible = Boolean.TRUE;
+    private Integer nroEjemplares;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -23,4 +24,11 @@ public class Libro {
     public void setAutorId(Long autorId) { this.autorId = autorId; }
     public Boolean getDisponible() { return disponible; }
     public void setDisponible(Boolean disponible) { this.disponible = disponible; }
+    public Integer getNroEjemplares() {
+        return nroEjemplares;
+    }
+    public void setNroEjemplares(Integer nroEjemplares) {
+        this.nroEjemplares = nroEjemplares;
+    }
+    
 }

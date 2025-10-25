@@ -30,12 +30,6 @@ public interface IABMAdministrador {
     List<Bibliotecario> consultarBibliotecarios();
     Bibliotecario consultarBibliotecario(Integer id);
     
-    Cliente agregar(Cliente c);
-    Cliente modificar(Cliente c);
-    void eliminarCliente(Long id);
-    List<Cliente> consultarClientes();
-    Cliente consultarCliente(Integer id);
-    
     Editorial agregar(Editorial e);
     Editorial modificar(Editorial e);
     void eliminarEditorial(Long id);
@@ -54,10 +48,6 @@ public interface IABMAdministrador {
     List<Libro> consultarLibros();
     Libro consultarLibro(Long id);
     
-    Prestamo agregar(Prestamo p);
-    Prestamo modificar(Prestamo p);
-    void eliminarPrestamo(Long id);
-    List<Prestamo> consultarPrestamos();
-    Prestamo consultarPrestamo(Long id);
+   
     
 }

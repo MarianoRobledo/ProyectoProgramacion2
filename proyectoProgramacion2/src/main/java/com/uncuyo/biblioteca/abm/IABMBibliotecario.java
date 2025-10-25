@@ -11,9 +11,11 @@ public interface IABMBibliotecario {
     Cliente modificar(Cliente c);
     void eliminarCliente(Long id);
     List<Cliente> consultarClientes();
+    Cliente consultarCliente(Integer id);
     
     Prestamo agregar(Prestamo p);
     Prestamo modificar(Prestamo p);
     void eliminarPrestamo(Long id);
     List<Prestamo> consultarPrestamos();
+    Prestamo consultarPrestamo(Long id);
 }

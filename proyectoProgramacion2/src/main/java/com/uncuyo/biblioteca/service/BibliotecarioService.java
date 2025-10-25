@@ -42,6 +42,12 @@ public class BibliotecarioService implements IABMBibliotecario {
     }
 
     @Override
+    public Cliente consultarCliente(Integer id) {
+        return clienteRepo.findByDni(id);
+    }
+
+    
+    @Override
     public Prestamo agregar(Prestamo p) {
         return prestamoRepo.save(p);
     }
@@ -59,6 +65,11 @@ public class BibliotecarioService implements IABMBibliotecario {
     @Override
     public List<Prestamo> consultarPrestamos() {
         return prestamoRepo.findAll();
+    }
+    
+    @Override
+    public Prestamo consultarPrestamo(Long id) {
+        return prestamoRepo.findById(id);
     }
     
     

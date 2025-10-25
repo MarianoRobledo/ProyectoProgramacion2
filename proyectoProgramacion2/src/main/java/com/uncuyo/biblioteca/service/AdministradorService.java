@@ -1,7 +1,7 @@
 package com.uncuyo.biblioteca.service;
 
 import com.uncuyo.biblioteca.abm.IABMAdministrador;
-import com.uncuyo.biblioteca.abm.IABMEjemplar;
+import com.uncuyo.biblioteca.abm.IABMBibliotecario;
 import com.uncuyo.biblioteca.model.Administrador;
 import com.uncuyo.biblioteca.model.Autor;
 import com.uncuyo.biblioteca.model.Biblioteca;
@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 
 @Service
-public class AdministradorService implements IABMAdministrador {
+public class AdministradorService implements IABMAdministrador, IABMBibliotecario {
 
     private final AdministradorRepository administradorRepo;
     private final AutorRepository autorRepo;
@@ -242,7 +242,6 @@ public class AdministradorService implements IABMAdministrador {
     public Prestamo consultarPrestamo(Long id) {
         return prestamoRepo.findById(id);
     }
-
 
     public void closeLoan(Long id) {
         Prestamo p = prestamoRepo.findById(id);

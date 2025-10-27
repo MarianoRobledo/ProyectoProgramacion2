@@ -4,6 +4,7 @@ import com.uncuyo.biblioteca.model.Editorial;
 import com.uncuyo.biblioteca.service.AdministradorService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -21,10 +22,10 @@ public class EditorialController {
     public ResponseEntity<Editorial> get(@PathVariable Long id) { Editorial e = service.consultarEditorial(id); if (e == null) return ResponseEntity.notFound().build(); return ResponseEntity.ok(e); }
 
     @PostMapping
-    public Editorial create(@RequestBody Editorial e) { return service.agregar(e); }
+    public Editorial create(@Valid @RequestBody Editorial e) { return service.agregar(e); }
 
     @PutMapping("/{id}")
-    public Editorial update(@PathVariable Long id, @RequestBody Editorial e) { e.setId(id); return service.agregar(e); }
+    public Editorial update(@PathVariable Long id, @Valid @RequestBody Editorial e) { e.setId(id); return service.agregar(e); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarEditorial(id); return ResponseEntity.noContent().build(); }

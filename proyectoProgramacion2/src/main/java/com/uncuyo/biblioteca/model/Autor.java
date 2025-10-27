@@ -1,9 +1,20 @@
 package com.uncuyo.biblioteca.model;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public class Autor extends Persona{
     private Long id;
+
+    @NotBlank(message = "El nombre del autor es obligatorio")
+    @Size(max = 200, message = "Nombre del autor demasiado largo")
     private String nombre;
+
+    // Fecha en formato ISO dd-MM-yyyy
+    @Size(max = 20, message = "Fecha inválida")
     private String fechaDeFallecimiento;
+
+    @Size(max = 100, message = "Nacionalidad demasiado larga")
     private String nacionalidad;
 
     // getters/setters

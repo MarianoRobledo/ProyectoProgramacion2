@@ -2,9 +2,9 @@ package com.uncuyo.biblioteca.controller;
 
 import com.uncuyo.biblioteca.model.Bibliotecario;
 import com.uncuyo.biblioteca.service.AdministradorService;
-import com.uncuyo.biblioteca.service.BibliotecarioService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -33,12 +33,12 @@ public class BibliotecarioController {
     }
 
     @PostMapping
-    public Bibliotecario create(@RequestBody Bibliotecario b) {
+    public Bibliotecario create(@Valid @RequestBody Bibliotecario b) {
         return service.agregar(b);
     }
 
     @PutMapping("/{id}")
-    public Bibliotecario update(@PathVariable Long id, @RequestBody Bibliotecario b) {
+    public Bibliotecario update(@PathVariable Long id, @Valid @RequestBody Bibliotecario b) {
         b.setId(id);
         return service.agregar(b);
     }

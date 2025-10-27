@@ -16,11 +16,11 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-    private final BibliotecarioService bibliotecarioService;
+    //private final BibliotecarioService bibliotecarioService;
     private final AdministradorService administradorService;
 
     public AuthController( BibliotecarioService bs, AdministradorService as) {
-        this.bibliotecarioService = bs;
+        //this.bibliotecarioService = bs;
         this.administradorService = as;
     }
 

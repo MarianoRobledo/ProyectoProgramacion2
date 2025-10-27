@@ -4,6 +4,7 @@ import com.uncuyo.biblioteca.model.Autor;
 import com.uncuyo.biblioteca.service.AdministradorService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -25,10 +26,10 @@ public class AutorController {
     }
 
     @PostMapping
-    public Autor create(@RequestBody Autor a) { return service.agregar(a); }
+    public Autor create(@Valid @RequestBody Autor a) { return service.agregar(a); }
 
     @PutMapping("/{id}")
-    public Autor update(@PathVariable Long id, @RequestBody Autor a) { a.setId(id); return service.agregar(a); }
+    public Autor update(@PathVariable Long id, @Valid @RequestBody Autor a) { a.setId(id); return service.agregar(a); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarAutor(id); return ResponseEntity.noContent().build(); }

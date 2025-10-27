@@ -3,11 +3,9 @@ package com.uncuyo.biblioteca.abm;
 import com.uncuyo.biblioteca.model.Administrador;
 import com.uncuyo.biblioteca.model.Autor;
 import com.uncuyo.biblioteca.model.Bibliotecario;
-import com.uncuyo.biblioteca.model.Cliente;
 import com.uncuyo.biblioteca.model.Editorial;
 import com.uncuyo.biblioteca.model.Ejemplar;
 import com.uncuyo.biblioteca.model.Libro;
-import com.uncuyo.biblioteca.model.Prestamo;
 import java.util.List;
 
 public interface IABMAdministrador {
@@ -47,7 +45,5 @@ public interface IABMAdministrador {
     void eliminarLibro(Long id);
     List<Libro> consultarLibros();
     Libro consultarLibro(Long id);
-    
-   
     
 }

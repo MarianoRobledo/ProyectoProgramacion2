@@ -34,6 +34,34 @@
     .hidden {
       display: none
     }
+    /* error banner */
+    #app-error {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: #fee;
+      color: #900;
+      padding: 10px 14px;
+      border: 1px solid #f88;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 1200;
+      display: none;
+    }
+    /* success banner */
+    #app-success {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: #eef9ee;
+      color: #085;
+      padding: 10px 14px;
+      border: 1px solid #8f8;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      z-index: 1199;
+      display: none;
+    }
   </style>
   <!-- React + Babel from CDN for quick dev (no build) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -43,41 +71,154 @@
 
 <body>
   <div id="root"></div>
+  <div id="app-error" role="alert"></div>
+  <div id="app-success" role="status"></div>
 
   <script type="text/babel" data-presets="react">
     
     const { useState, useEffect, useRef } = React;
 
     // Helpers
+    window.displayError = (msg) => {
+      try {
+        const el = document.getElementById('app-error');
+        if (!el) return;
+        el.textContent = msg || 'Ocurrió un error';
+        el.style.display = 'block';
+        clearTimeout(window._appErrorTimeout);
+        window._appErrorTimeout = setTimeout(() => { el.style.display = 'none'; }, 6000);
+      } catch (e) { console.error(e); }
+    };
+
+    window.displaySuccess = (msg) => {
+      try {
+        const el = document.getElementById('app-success');
+        if (!el) return;
+        el.textContent = msg || 'Operación exitosa';
+        el.style.display = 'block';
+        clearTimeout(window._appSuccessTimeout);
+        window._appSuccessTimeout = setTimeout(() => { el.style.display = 'none'; }, 4500);
+      } catch (e) { console.error(e); }
+    };
+
     const safeFetchJson = async (url, opts) => {
       try {
         const res = await fetch(url, opts);
-        if (!res.ok) return null;
-        return await res.json();
-      } catch (e) { return null; }
+        const contentType = res.headers.get('content-type') || '';
+        if (!res.ok) {
+          // try to get error details from body
+          try {
+            if (contentType.includes('application/json')) {
+              const body = await res.json();
+              const msg = body && (body.message || body.error || JSON.stringify(body)) || res.statusText;
+              window.displayError(msg);
+            } else {
+              const txt = await res.text();
+              window.displayError(txt || res.statusText);
+            }
+          } catch (e) {
+            window.displayError(res.statusText || 'Error de red');
+          }
+          return null;
+        }
+        if (contentType.includes('application/json')) return await res.json();
+        return null;
+      } catch (e) { window.displayError('Error al contactar al servidor: ' + (e.message || e)); return null; }
     };
 
-    const debounce = (fn, wait = 400) => {
-      let t;
-      return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    // Validation helpers (client-side)
+    const validators = {
+      isEmail: (v) => typeof v === 'string' && v.includes('@') && v.includes('.'),
+      isName: (v) => typeof v === 'string' && /^(?:[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+)$/.test(v || ''),
+      isPhone: (v) => typeof v === 'string' && /^[0-9+()\-\s]{6,20}$/.test(v || ''),
+      isISBN: (v) => typeof v === 'string' && /^[0-9Xx\-]{10,17}$/.test((v||'')),
+      isDateISO: (v) => typeof v === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(v || ''),
+      notBlank: (v) => typeof v === 'string' && v.trim().length > 0
     };
 
-    // Format date string to dd-MM-yyyy 
+    // Helpers to normalize/display dates
+    // Internal canonical format used across frontend and DB: dd-MM-yyyy
+    // <input type="date"> requires value in yyyy-MM-dd; we convert when binding
+
+    // format a server/frontend date value into dd-MM-yyyy for display
     const formatDate = (d) => {
       if (!d) return '';
-      // try to extract ISO date part (yyyy-MM-dd)
-      const m = String(d).match(/(\d{4})-(\d{2})-(\d{2})/);
-      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-      // fallback: try Date parse
-      const dt = new Date(d);
+      const s = String(d).trim();
+      // already dd-MM-yyyy
+      if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+      // yyyy-MM-dd -> convert
+      const m1 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+      // try parse as Date as last resort (may be timezone-sensitive)
+      const dt = new Date(s);
       if (!isNaN(dt)) {
         const day = String(dt.getDate()).padStart(2, '0');
         const month = String(dt.getMonth() + 1).padStart(2, '0');
         const year = dt.getFullYear();
         return `${day}-${month}-${year}`;
       }
-      return String(d);
+      return s;
     };
+
+    // format value for <input type="date"> (must be yyyy-MM-dd)
+    // accepts internal dd-MM-yyyy or yyyy-MM-dd or Date-ish strings
+    const formatDateForInput = (d) => {
+      if (!d) return '';
+      const s = String(d).trim();
+      // if already dd-MM-yyyy -> convert to yyyy-MM-dd
+      const m = s.match(/^\d{2}-\d{2}-\d{4}$/);
+      if (m) {
+        const parts = s.split('-'); // dd, MM, yyyy
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      // if already yyyy-MM-dd
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // try parse
+      const dt = new Date(s);
+      if (!isNaN(dt)) {
+        const y = dt.getFullYear();
+        const mm = String(dt.getMonth() + 1).padStart(2, '0');
+        const dd = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${mm}-${dd}`;
+      }
+      return '';
+    };
+
+    // convert input.value (yyyy-MM-dd) into internal dd-MM-yyyy (or null/empty)
+    const inputToDDMMYYYY = (val) => {
+      if (!val) return '';
+      const m = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+      // already dd-MM-yyyy?
+      if (/^\d{2}-\d{2}-\d{4}$/.test(val)) return val;
+      const dt = new Date(val);
+      if (!isNaN(dt)) {
+        const day = String(dt.getDate()).padStart(2, '0');
+        const month = String(dt.getMonth() + 1).padStart(2, '0');
+        const year = dt.getFullYear();
+        return `${day}-${month}-${year}`;
+      }
+      return val;
+    };
+
+    // Reusable SearchSection: attributes = [{value,label}], onChange receives {attribute, query}
+    function SearchSection({ attributes = [], placeholder = 'Buscar...', onChange }) {
+      const [attribute, setAttribute] = useState((attributes[0] && attributes[0].value) || '');
+      const [query, setQuery] = useState('');
+      useEffect(() => { if (onChange) onChange({ attribute, query }); }, [attribute, query]);
+      return (
+        <div style={{ marginTop: 12, marginBottom: 12 }}>
+          <strong>Buscar</strong>
+          <div style={{ marginTop: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select value={attribute} onChange={e => setAttribute(e.target.value)}>
+              {attributes.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </select>
+            <input placeholder={placeholder} value={query} onChange={e => setQuery(e.target.value)} style={{ flex: 1 }} />
+            <button onClick={() => { setQuery(''); if (onChange) onChange({ attribute, query: '' }); }}>Limpiar</button>
+          </div>
+        </div>
+      );
+    }
 
     // Main App
     function App() {
@@ -90,9 +231,8 @@
         setError(null);
         if (!dni) { setError('Ingrese DNI'); return; }
         try {
-          const res = await fetch('/api/auth/login?dni=' + encodeURIComponent(dni));
-          const body = await res.json();
-          if (!body.role) { 
+          const body = await safeFetchJson('/api/auth/login?dni=' + encodeURIComponent(dni));
+          if (!body || !body.role) { 
             setError('Usuario no encontrado'); 
             setUser(null); return; 
           }
@@ -142,6 +282,7 @@
       const [prestamos, setPrestamos] = useState([]);
       const [ejemplares, setEjemplares] = useState([]);
       const [libros, setLibros] = useState([]);
+      const [mode, setMode] = useState('actuales'); // 'actuales' | 'historial'
       const saves = useRef({});
 
       function clientIdFromObject(obj) { return obj.id || obj.legajo || obj.dni; }
@@ -150,7 +291,7 @@
         const [allPrest, allEj, allLib] = await Promise.all([
           safeFetchJson('/api/prestamos') || [],
           safeFetchJson('/api/ejemplares') || [],
-          safeFetchJson('/api/libros') || []
+          safeFetchJson('/api/libros/all') || []
         ]);
         const mine = (Array.isArray(allPrest) ? allPrest : []).filter(p => String(p.clienteId) === String(client.id || clientIdFromObject(client)));
         setPrestamos(mine);
@@ -167,33 +308,40 @@
         return lib ? `${lib.titulo} (ejemplar ${ej.id})` : `ejemplar ${ej.id}`;
       };
 
-      const savePrestamo = (id, updated) => {
-        // Debounce per id
-        if (saves.current[id]) clearTimeout(saves.current[id]);
-        saves.current[id] = setTimeout(async () => {
-          await fetch('/api/prestamos/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
-          loadAll();
-        }, 500);
-      };
+      // filter according to mode: actuales = sin fechaDevolucion, historial = con fechaDevolucion
+      const displayed = (prestamos || []).filter(p => {
+        if (mode === 'actuales') return p.fechaDevolucion == null || p.fechaDevolucion === '';
+        return p.fechaDevolucion != null && p.fechaDevolucion !== '';
+      });
 
       return (
         <div>
           <p>Préstamos de: {client.nombre} {client.apellido}</p>
+
+          <div style={{ marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <label style={{ fontWeight: 'bold' }}>Ver:</label>
+            <select value={mode} onChange={e => setMode(e.target.value)}>
+              <option value="actuales">Préstamos en curso</option>
+              <option value="historial">Historial</option>
+            </select>
+            <span style={{ marginLeft: 12, color: '#555' }}>{displayed.length} registro(s)</span>
+          </div>
+
           <table><thead><tr><th>ID</th><th style={{textAlign: 'left'}}>Libro / Ejemplar</th><th>Inicio</th><th>Devolución</th></tr></thead>
-            <tbody>{prestamos.map(p => (
+            <tbody>{displayed.map(p => (
               <tr key={p.id}>
                 <td>{p.id}</td>
                 <td style={{textAlign: 'left'}}>{ejemplarTitle(p.ejemplarId)}</td>
-                <td>{formatDate(p.fechaInicio)}</td>
-                {(p.fechaDevolucion != null) ? (<td>{formatDate(p.fechaDevolucion)}</td>) : (<td>--</td>)}
-                {/*<td>
-                  <input type="date" value={p.fechaDevolucion || ''} onChange={e => {
-                    const val = e.target.value || null;
-                    const updated = { ...p, fechaDevolucion: val };
+                <td>
+                  <input type="date" value={formatDateForInput(p.fechaInicio) || ''} onChange={e => {
+                    const raw = e.target.value || '';
+                    const val = raw ? inputToDDMMYYYY(raw) : null;
+                    const updated = { ...p, fechaInicio: val };
                     setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
-                    savePrestamo(p.id, updated);
+                    scheduleSavePrestamo(p.id, updated);
                   }} />
-                </td>*/}
+                </td>
+                {(p.fechaDevolucion != null) ? (<td>{formatDate(p.fechaDevolucion)}</td>) : (<td>--</td>)}
               </tr>
             ))}</tbody>
           </table>
@@ -231,7 +379,6 @@
             <option value="libros">Libros</option>
             <option value="autores">Autores</option>
             <option value="editoriales">Editoriales</option>
-            <option value="ejemplares">Ejemplares</option>
             <option value="bibliotecarios">Bibliotecarios</option>
             <option value="prestamos">Préstamos</option>
             <option value="clientes">Clientes</option>
@@ -256,41 +403,111 @@
       const [list, setList] = useState([]);
       const [autores, setAutores] = useState([]);
       const [editoriales, setEditoriales] = useState([]);
+      const [ejemplares, setEjemplares] = useState([]);
+      const [prestamos, setPrestamos] = useState([]);
       const [form, setForm] = useState({ titulo: '', isbn: '', autorId: '', editorialId: '' });
+      const [search, setSearch] = useState({ attribute: 'titulo', query: '' });
       const saves = useRef({});
 
       async function loadAll() {
-        const [l, a, e] = await Promise.all([safeFetchJson('/api/libros') || [], safeFetchJson('/api/autores') || [], safeFetchJson('/api/editoriales') || []]);
+        const [l, a, e, ex, p] = await Promise.all([
+          safeFetchJson('/api/libros') || [],
+          safeFetchJson('/api/autores') || [],
+          safeFetchJson('/api/editoriales') || [],
+          safeFetchJson('/api/ejemplares') || [],
+          safeFetchJson('/api/prestamos') || []
+        ]);
         setList(Array.isArray(l) ? l : []);
         setAutores(Array.isArray(a) ? a : []);
         setEditoriales(Array.isArray(e) ? e : []);
+        setEjemplares(Array.isArray(ex) ? ex : []);
+        setPrestamos(Array.isArray(p) ? p : []);
       }
 
       useEffect(() => { loadAll(); }, []);
 
-      async function addBook() { await fetch('/api/libros', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setForm({ titulo: '', isbn: '', autorId: '', editorialId: '' }); loadAll(); }
-      async function deleteBook(id) { if (!confirm('Eliminar libro ' + id + '?')) return; await fetch('/api/libros/' + id, { method: 'DELETE' }); loadAll(); }
+      async function addBook() {
+        // client-side validation
+        const errors = [];
+        if (!validators.notBlank(form.titulo)) errors.push('Título es obligatorio');
+        if (form.isbn && !validators.isISBN(form.isbn)) errors.push('ISBN con formato inválido');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
+        const res = await safeFetchJson('/api/libros', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        if (res) {
+          setForm({ titulo: '', isbn: '', autorId: '', editorialId: '' });
+          loadAll();
+          window.displaySuccess('Libro agregado correctamente');
+        }
+      }
+      async function deleteBook(id) { if (!confirm('Eliminar libro ' + id + '?')) return; await safeFetchJson('/api/libros/' + id, { method: 'DELETE' }); loadAll(); }
 
       function scheduleSave(id, updated) {
         if (saves.current[id]) clearTimeout(saves.current[id]);
-        saves.current[id] = setTimeout(async () => { await fetch('/api/libros/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); loadAll(); delete saves.current[id]; }, 500);
+        saves.current[id] = setTimeout(async () => {
+          const r = await safeFetchJson('/api/libros/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+          if (r !== null) window.displaySuccess('Libro actualizado correctamente');
+          loadAll();
+          delete saves.current[id];
+        }, 1000);
       }
+
+      // ejemplares management
+      const increase = async (libroId) => {
+        const r = await safeFetchJson('/api/ejemplares', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libroId }) });
+        await loadAll();
+        if (r !== null) window.displaySuccess('Ejemplar agregado correctamente');
+      };
+
+      const decrease = async (libroId) => {
+        const loanedEjIds = new Set((prestamos || []).filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
+        const candidate = (ejemplares || []).find(ex => String(ex.libroId) === String(libroId) && !loanedEjIds.has(String(ex.id)));
+        const lib = list.find(lb => String(lb.id) === String(libroId));
+        const libroTitle = lib ? lib.titulo : `Libro ${libroId}`;
+        if (!candidate) { alert('No hay ejemplares disponibles para eliminar (los existentes están prestados)'); return; }
+        if (!confirm('Eliminar ejemplar ' + candidate.id + ' del libro "' + libroTitle + '"?')) return;
+        await safeFetchJson('/api/ejemplares/' + candidate.id, { method: 'DELETE' });
+        await loadAll();
+      };
+
+      const statsFor = (libroId) => {
+        const total = (ejemplares || []).filter(ex => String(ex.libroId) === String(libroId)).length;
+        const loaned = (prestamos || []).filter(p => p.fechaDevolucion == null).map(p => p.ejemplarId).filter(eid => {
+          const ej = (ejemplares || []).find(x => String(x.id) === String(eid));
+          return ej && String(ej.libroId) === String(libroId);
+        }).length;
+        return { total, loaned, available: Math.max(0, total - loaned) };
+      };
+
+      const attributes = [
+        { value: 'titulo', label: 'Título' },
+        { value: 'isbn', label: 'ISBN' },
+        { value: 'autor', label: 'Autor' },
+        { value: 'editorial', label: 'Editorial' }
+      ];
+
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return list;
+        return (list || []).filter(l => {
+          if (search.attribute === 'titulo') return (l.titulo || '').toLowerCase().includes(q);
+          if (search.attribute === 'isbn') return (l.isbn || '').toLowerCase().includes(q);
+          if (search.attribute === 'autor') {
+            const a = autores.find(x => String(x.id) === String(l.autorId));
+            return (a && ((a.nombre||'') + ' ' + (a.apellido||'')).toLowerCase().includes(q)) || false;
+          }
+          if (search.attribute === 'editorial') {
+            const e = editoriales.find(x => String(x.id) === String(l.editorialId));
+            return (e && (e.nombre || '').toLowerCase().includes(q)) || false;
+          }
+          return false;
+        });
+      })();
 
       return (
         <div>
           <h3>Libros</h3>
-          <table><thead><tr><th>ID</th><th>Título</th><th>ISBN</th><th>Autor</th><th>Editorial</th><th>Acciones</th></tr></thead>
-            <tbody>{list.map(l => (
-              <tr key={l.id}>
-                <td>{l.id}</td>
-                <td><input value={l.titulo || ''} onChange={e => { const u = { ...l, titulo: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
-                <td><input value={l.isbn || ''} onChange={e => { const u = { ...l, isbn: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
-                <td><select value={l.autorId || ''} onChange={e => { const u = { ...l, autorId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{autores.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}</select></td>
-                <td><select value={l.editorialId || ''} onChange={e => { const u = { ...l, editorialId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{editoriales.map(ei => <option key={ei.id} value={ei.id}>{ei.nombre}</option>)}</select></td>
-                <td><button onClick={() => deleteBook(l.id)}>Eliminar</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
+
+          {/* 1) Add section */}
           <h4>Agregar Libro</h4>
           <table style={{ marginTop: 8 }}>
             <thead>
@@ -314,6 +531,32 @@
               </tr>
             </tbody>
           </table>
+
+          {/* 2) Search section */}
+          <SearchSection attributes={attributes} placeholder="Buscar libros..." onChange={setSearch} />
+
+          {/* 3) Results */}
+          <table style={{ marginTop: 12 }}><thead><tr><th>ID</th><th>Título</th><th>ISBN</th><th>Autor</th><th>Editorial</th><th>Total</th><th>Prestados</th><th>Disponibles</th><th>Acciones</th></tr></thead>
+            <tbody>{filtered.map(l => {
+              const s = statsFor(l.id);
+              return (
+              <tr key={l.id}>
+                <td>{l.id}</td>
+                <td><input value={l.titulo || ''} onChange={e => { const u = { ...l, titulo: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
+                <td><input value={l.isbn || ''} onChange={e => { const u = { ...l, isbn: e.target.value }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }} /></td>
+                <td><select value={l.autorId || ''} onChange={e => { const u = { ...l, autorId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{autores.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}</select></td>
+                <td><select value={l.editorialId || ''} onChange={e => { const u = { ...l, editorialId: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === l.id ? u : x)); scheduleSave(l.id, u); }}><option value="">-</option>{editoriales.map(ei => <option key={ei.id} value={ei.id}>{ei.nombre}</option>)}</select></td>
+                <td>{s.total}</td>
+                <td>{s.loaned}</td>
+                <td>{s.available}</td>
+                <td>
+                  <button onClick={() => increase(l.id)} style={{ marginRight: 6 }}>+</button>
+                  <button onClick={() => decrease(l.id)} disabled={s.available <= 0}>-</button>
+                  <button style={{ marginLeft: 8 }} onClick={() => deleteBook(l.id)}>Eliminar</button>
+                </td>
+              </tr>
+            )})}</tbody>
+          </table>
         </div>
       );
     }
@@ -321,6 +564,7 @@
     function AuthorsManager() {
       const [list, setList] = useState([]);
       const [form, setForm] = useState({ nombre: '', fechaDeNacimiento: '', fechaDeFallecimiento: '', nacionalidad: '' });
+      const [search, setSearch] = useState({ attribute: 'nombre', query: '' });
       const saves = useRef({});
       async function load() { 
         const d = await safeFetchJson('/api/autores'); 
@@ -328,52 +572,55 @@
       }
       useEffect(() => { load(); }, []);
       async function add() { 
-        await fetch('/api/autores', { 
+        const errors = [];
+        if (!validators.notBlank(form.nombre) || !validators.isName(form.nombre)) errors.push('Nombre inválido');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
+        const res = await safeFetchJson('/api/autores', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify(form) 
         }); 
-        setForm({ nombre: '', fechaDeNacimiento: '', fechaDeFallecimiento: '', nacionalidad: '' }); 
-        load(); 
+        if (res) {
+          setForm({ nombre: '', fechaDeNacimiento: '', fechaDeFallecimiento: '', nacionalidad: '' }); 
+          load(); 
+          window.displaySuccess('Autor agregado correctamente');
+        }
       }
       async function deleteAuthor(id) { 
         if (!confirm('Eliminar autor ' + id + '?')) return; 
-        await fetch('/api/autores/' + id, { method: 'DELETE' }); 
+        await safeFetchJson('/api/autores/' + id, { method: 'DELETE' }); 
         load(); 
       }
       function scheduleSave(id, updated) { 
         if (saves.current[id]) clearTimeout(saves.current[id]); 
         saves.current[id] = setTimeout(async () => { 
-          await fetch('/api/autores/' + id, { 
+          const r = await safeFetchJson('/api/autores/' + id, { 
             method: 'PUT', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify(updated) 
           }); 
+          if (r !== null) window.displaySuccess('Autor actualizado correctamente');
           load(); 
           delete saves.current[id]; 
-        }, 400); 
+        }, 1000); 
       }
+
+      const attributes = [ { value: 'nombre', label: 'Nombre' }, { value: 'nacionalidad', label: 'Nacionalidad' } ];
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return list;
+        return (list || []).filter(a => {
+          if (search.attribute === 'nombre') return ((a.nombre||'') + ' ' + (a.apellido||'')).toLowerCase().includes(q);
+          if (search.attribute === 'nacionalidad') return (a.nacionalidad || '').toLowerCase().includes(q);
+          return false;
+        });
+      })();
+
       return (
         <div>
           <h3>Autores</h3>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Nombre</th><th>Fecha Nac.</th><th>Fecha Fallec.</th><th>Nacionalidad</th><th>Acciones</th></tr>
-            </thead>
-            <tbody>
-              {list.map(a => (
-                <tr key={a.id}>
-                  <td>{a.id}</td>
-                  <td><input placeholder="Nombre" value={a.nombre || ''} onChange={e => { const u = { ...a, nombre: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
-                  <td><input type="date" placeholder="Fecha Nac." value={a.fechaDeNacimiento || ''} onChange={e => { const u = { ...a, fechaDeNacimiento: e.target.value || null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
-                  <td><input type="date" placeholder="Fecha Fallec." value={a.fechaDeFallecimiento || ''} onChange={e => { const u = { ...a, fechaDeFallecimiento: e.target.value || null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
-                  <td><input placeholder="Nacionalidad" value={a.nacionalidad || ''} onChange={e => { const u = { ...a, nacionalidad: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
-                  <td><button onClick={() => deleteAuthor(a.id)}>Eliminar</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
 
+          {/* 1) Add */}
           <h4>Agregar Autor</h4>
           <table style={{ marginTop: 8 }}>
             <thead>
@@ -382,11 +629,33 @@
             <tbody>
               <tr>
                 <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
-                <td><input type="date" value={form.fechaDeNacimiento} onChange={e => setForm({ ...form, fechaDeNacimiento: e.target.value })} /></td>
-                <td><input type="date" value={form.fechaDeFallecimiento} onChange={e => setForm({ ...form, fechaDeFallecimiento: e.target.value })} /></td>
+                <td><input type="date" value={formatDateForInput(form.fechaDeNacimiento)} onChange={e => setForm({ ...form, fechaDeNacimiento: inputToDDMMYYYY(e.target.value) })} /></td>
+                <td><input type="date" value={formatDateForInput(form.fechaDeFallecimiento)} onChange={e => setForm({ ...form, fechaDeFallecimiento: inputToDDMMYYYY(e.target.value) })} /></td>
                 <td><input placeholder="Nacionalidad" value={form.nacionalidad} onChange={e => setForm({ ...form, nacionalidad: e.target.value })} /></td>
                 <td><button onClick={add}>Agregar</button></td>
               </tr>
+            </tbody>
+          </table>
+
+          {/* 2) Search */}
+          <SearchSection attributes={attributes} placeholder="Buscar autores..." onChange={setSearch} />
+
+          {/* 3) Results */}
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Nombre</th><th>Fecha Nac.</th><th>Fecha Fallec.</th><th>Nacionalidad</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              {filtered.map(a => (
+                <tr key={a.id}>
+                  <td>{a.id}</td>
+                  <td><input placeholder="Nombre" value={a.nombre || ''} onChange={e => { const u = { ...a, nombre: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input type="date" placeholder="Fecha Nac." value={formatDateForInput(a.fechaDeNacimiento) || ''} onChange={e => { const raw = e.target.value || ''; const u = { ...a, fechaDeNacimiento: raw ? inputToDDMMYYYY(raw) : null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input type="date" placeholder="Fecha Fallec." value={formatDateForInput(a.fechaDeFallecimiento) || ''} onChange={e => { const raw = e.target.value || ''; const u = { ...a, fechaDeFallecimiento: raw ? inputToDDMMYYYY(raw) : null }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><input placeholder="Nacionalidad" value={a.nacionalidad || ''} onChange={e => { const u = { ...a, nacionalidad: e.target.value }; setList(prev => prev.map(x => x.id === a.id ? u : x)); scheduleSave(a.id, u); }} /></td>
+                  <td><button onClick={() => deleteAuthor(a.id)}>Eliminar</button></td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -396,34 +665,41 @@
     function EditorialsManager() {
       const [list, setList] = useState([]);
       const [form, setForm] = useState({ nombre: '', pais: '', direccion: '', telefono: '', email: '' });
+      const [search, setSearch] = useState({ attribute: 'nombre', query: '' });
       const saves = useRef({});
       async function load() { const d = await safeFetchJson('/api/editoriales'); setList(Array.isArray(d) ? d : []); }
+
       useEffect(() => { load(); }, []);
-      async function add() { await fetch('/api/editoriales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) }); setForm({ nombre: '', pais: '', direccion: '', telefono: '', email: '' }); load(); }
-      async function deleteEditorial(id) { if (!confirm('Eliminar editorial ' + id + '?')) return; await fetch('/api/editoriales/' + id, { method: 'DELETE' }); load(); }
-      function scheduleSave(id, updated) { if (saves.current[id]) clearTimeout(saves.current[id]); saves.current[id] = setTimeout(async () => { await fetch('/api/editoriales/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); load(); delete saves.current[id]; }, 400); }
+
+      async function add() {
+        const errors = [];
+        if (!validators.notBlank(form.nombre)) errors.push('Nombre es obligatorio');
+        if (!validators.notBlank(form.direccion)) errors.push('Dirección es obligatoria');
+        if (form.email && !validators.isEmail(form.email)) errors.push('Email con formato inválido');
+        if (form.telefono && !validators.isPhone(form.telefono)) errors.push('Teléfono con formato inválido');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
+        const res = await safeFetchJson('/api/editoriales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        if (res) { setForm({ nombre: '', pais: '', direccion: '', telefono: '', email: '' }); load(); window.displaySuccess('Editorial agregada correctamente'); }
+      }
+      async function deleteEditorial(id) { if (!confirm('Eliminar editorial ' + id + '?')) return; await safeFetchJson('/api/editoriales/' + id, { method: 'DELETE' }); load(); }
+      function scheduleSave(id, updated) { if (saves.current[id]) clearTimeout(saves.current[id]); saves.current[id] = setTimeout(async () => { const r = await safeFetchJson('/api/editoriales/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); if (r !== null) window.displaySuccess('Editorial actualizada correctamente'); load(); delete saves.current[id]; }, 1000); }
+
+      const attributes = [ { value: 'nombre', label: 'Nombre' }, { value: 'pais', label: 'País' } ];
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return list;
+        return (list || []).filter(e => {
+          if (search.attribute === 'nombre') return (e.nombre || '').toLowerCase().includes(q);
+          if (search.attribute === 'pais') return (e.pais || '').toLowerCase().includes(q);
+          return false;
+        });
+      })();
+
       return (
         <div>
           <h3>Editoriales</h3>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Nombre</th><th>País</th><th>Dirección</th><th>Teléfono</th><th>Email</th><th>Acciones</th></tr>
-            </thead>
-            <tbody>
-              {list.map(e => (
-                <tr key={e.id}>
-                  <td>{e.id}</td>
-                  <td><input placeholder="Nombre" value={e.nombre || ''} onChange={ev => { const u = { ...e, nombre: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
-                  <td><input placeholder="País" value={e.pais || ''} onChange={ev => { const u = { ...e, pais: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
-                  <td><input placeholder="Dirección" value={e.direccion || ''} onChange={ev => { const u = { ...e, direccion: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
-                  <td><input placeholder="Teléfono" value={e.telefono || ''} onChange={ev => { const u = { ...e, telefono: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
-                  <td><input placeholder="Email" value={e.email || ''} onChange={ev => { const u = { ...e, email: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
-                  <td><button onClick={() => deleteEditorial(e.id)}>Eliminar</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
 
+          {/* 1) Add */}
           <h4>Agregar Editorial</h4>
           <table style={{ marginTop: 8 }}>
             <thead>
@@ -440,99 +716,29 @@
               </tr>
             </tbody>
           </table>
-        </div>
-      );
-    }
 
-    function EjemplaresManager() {
-      const [ejemplares, setEjemplares] = useState([]);
-      const [prestamos, setPrestamos] = useState([]);
-      const [libros, setLibros] = useState([]);
-      const loading = useRef(false);
+          {/* 2) Search */}
+          <SearchSection attributes={attributes} placeholder="Buscar editoriales..." onChange={setSearch} />
 
-      async function loadAll() {
-        loading.current = true;
-        const [e, p, l] = await Promise.all([
-          safeFetchJson('/api/ejemplares') || [],
-          safeFetchJson('/api/prestamos') || [],
-          safeFetchJson('/api/libros') || []
-        ]);
-        setEjemplares(Array.isArray(e) ? e : []);
-        setPrestamos(Array.isArray(p) ? p : []);
-        setLibros(Array.isArray(l) ? l : []);
-        loading.current = false;
-      }
-
-      useEffect(() => { loadAll(); }, []);
-
-      // aggregate by libroId
-      const byLibro = () => {
-        const map = {};
-        libros.forEach(lb => { map[lb.id] = { libro: lb, total: 0, loaned: 0 }; });
-        ejemplares.forEach(ex => {
-          const id = String(ex.libroId);
-          if (!map[id]) map[id] = { libro: { id: ex.libroId, titulo: 'Unknown' }, total: 0, loaned: 0 };
-          map[id].total++;
-        });
-        prestamos.forEach(pr => {
-          if (pr.fechaDevolucion == null) {
-            const ej = ejemplares.find(x => String(x.id) === String(pr.ejemplarId));
-            if (ej) {
-              const id = String(ej.libroId);
-              if (!map[id]) map[id] = { libro: { id: ej.libroId, titulo: 'Unknown' }, total: 0, loaned: 0 };
-              map[id].loaned++;
-            }
-          }
-        });
-        return Object.values(map).sort((a,b) => (''+a.libro.titulo).localeCompare(''+b.libro.titulo));
-      };
-
-      async function increase(libroId) {
-        // create one ejemplar for libroId
-        await fetch('/api/ejemplares', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ libroId }) });
-        await loadAll();
-      }
-
-      async function decrease(libroId) {
-        // delete one non-loaned ejemplar for libroId
-        // find an ejemplar not currently loaned
-        const loanedEjIds = new Set(prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
-        const candidate = ejemplares.find(ex => String(ex.libroId) === String(libroId) && !loanedEjIds.has(String(ex.id)));
-        const lib = libros.find(lb => String(lb.id) === String(libroId));
-        const libroTitle = lib ? lib.titulo : `Libro ${libroId}`;
-        if (!candidate) { alert('No hay ejemplares disponibles para eliminar (los existentes están prestados)'); return; }
-        if (!confirm('Eliminar ejemplar ' + candidate.id + ' del libro "' + libroTitle + '"?')) return;
-        await fetch('/api/ejemplares/' + candidate.id, { method: 'DELETE' });
-        await loadAll();
-      }
-
-      const rows = byLibro();
-
-      return (
-        <div>
-          <h3>Ejemplares por Libro</h3>
+          {/* 3) Results */}
           <table>
             <thead>
-              <tr><th style={{ textAlign: 'left' }}>Libro</th><th>Total</th><th>Prestados</th><th>Disponibles</th><th>Acciones</th></tr>
+              <tr><th>ID</th><th>Nombre</th><th>País</th><th>Dirección</th><th>Teléfono</th><th>Email</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.libro.id}>
-                  <td style={{ textAlign: 'left' }}>{r.libro.titulo}</td>
-                  <td>{r.total}</td>
-                  <td>{r.loaned}</td>
-                  <td>{Math.max(0, r.total - r.loaned)}</td>
-                  <td>
-                    <button onClick={() => increase(r.libro.id)} disabled={loading.current} style={{ marginRight: 6 }}>+</button>
-                    <button onClick={() => decrease(r.libro.id)} disabled={loading.current || (r.total - r.loaned) <= 0}>-</button>
-                  </td>
+              {filtered.map(e => (
+                <tr key={e.id}>
+                  <td>{e.id}</td>
+                  <td><input placeholder="Nombre" value={e.nombre || ''} onChange={ev => { const u = { ...e, nombre: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="País" value={e.pais || ''} onChange={ev => { const u = { ...e, pais: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Dirección" value={e.direccion || ''} onChange={ev => { const u = { ...e, direccion: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Teléfono" value={e.telefono || ''} onChange={ev => { const u = { ...e, telefono: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><input placeholder="Email" value={e.email || ''} onChange={ev => { const u = { ...e, email: ev.target.value }; setList(prev => prev.map(x => x.id === e.id ? u : x)); scheduleSave(e.id, u); }} /></td>
+                  <td><button onClick={() => deleteEditorial(e.id)}>Eliminar</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {/*<div style={{ marginTop: 8 }}>
-            <button onClick={loadAll}>Actualizar</button>
-          </div>*/}
         </div>
       );
     }
@@ -540,6 +746,7 @@
     function BibliotecariosManager() {
       const [list, setList] = useState([]);
       const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '' });
+      const [search, setSearch] = useState({ attribute: 'nombre', query: '' });
       const saves = useRef({});
       async function load() { 
         const d = await safeFetchJson('/api/bibliotecarios'); 
@@ -547,44 +754,57 @@
       }
       useEffect(() => { load(); }, []);
       async function add() { 
-        // prepare payload converting numeric fields
+        const errors = [];
+        if (!validators.notBlank(form.nombre) || !validators.isName(form.nombre)) errors.push('Nombre inválido');
+        if (!validators.notBlank(form.apellido) || !validators.isName(form.apellido)) errors.push('Apellido inválido');
+        if (form.email && !validators.isEmail(form.email)) errors.push('Email con formato inválido');
+        if (form.telefono && !validators.isPhone(form.telefono)) errors.push('Teléfono con formato inválido');
+        if (form.dni && isNaN(parseInt(form.dni))) errors.push('DNI debe ser numérico');
+        if (form.legajo && isNaN(parseInt(form.legajo))) errors.push('Legajo debe ser numérico');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
         const payload = { ...form };
         if (payload.legajo !== '') payload.legajo = parseInt(payload.legajo);
         if (payload.dni !== '') payload.dni = parseInt(payload.dni);
-        await fetch('/api/bibliotecarios', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
-        setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '' }); 
-        load(); 
+        const res = await safeFetchJson('/api/bibliotecarios', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); 
+        if (res) {
+          setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '' }); 
+          load(); 
+          window.displaySuccess('Bibliotecario agregado correctamente');
+        }
       }
       async function deleteBibl(id) { 
         if (!confirm('Eliminar bibliotecario ' + id + '?')) return; 
-        await fetch('/api/bibliotecarios/' + id, { method: 'DELETE' }); 
+        await safeFetchJson('/api/bibliotecarios/' + id, { method: 'DELETE' }); 
         load(); 
       }
       function scheduleSave(id, updated) { 
         if (saves.current[id]) clearTimeout(saves.current[id]); 
         saves.current[id] = setTimeout(async () => { 
-          await fetch('/api/bibliotecarios/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); 
+          const r = await safeFetchJson('/api/bibliotecarios/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) }); 
+          if (r !== null) window.displaySuccess('Bibliotecario actualizado correctamente');
           load(); 
           delete saves.current[id]; 
-        }, 400); 
+        }, 1000); 
       }
+
+      const attributes = [ { value: 'nombre', label: 'Nombre' }, { value: 'apellido', label: 'Apellido' }, { value: 'dni', label: 'DNI' }, { value: 'legajo', label: 'Legajo' } ];
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return list;
+        return (list || []).filter(b => {
+          if (search.attribute === 'nombre') return (b.nombre || '').toLowerCase().includes(q);
+          if (search.attribute === 'apellido') return (b.apellido || '').toLowerCase().includes(q);
+          if (search.attribute === 'dni') return String(b.dni || '').includes(q);
+          if (search.attribute === 'legajo') return String(b.legajo || '').includes(q);
+          return false;
+        });
+      })();
+
       return (
         <div>
           <h3>Bibliotecarios</h3>
-          <table><thead><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Acciones</th></tr></thead>
-            <tbody>{list.map(b => (
-              <tr key={b.id}>
-                <td>{b.id}</td>
-                <td><input value={b.nombre || ''} onChange={e => { const u = { ...b, nombre: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
-                <td><input value={b.apellido || ''} onChange={e => { const u = { ...b, apellido: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
-                <td><input value={b.dni || ''} onChange={e => { const u = { ...b, dni: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
-                <td><input value={b.email || ''} onChange={e => { const u = { ...b, email: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} /></td>
-                <td><input value={b.telefono || ''} onChange={e => { const u = { ...b, telefono: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
-                <td><input value={b.legajo || ''} onChange={e => { const u = { ...b, legajo: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
-                <td><button onClick={() => deleteBibl(b.id)}>Eliminar</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
+
+          {/* 1) Add */}
           <h4>Agregar Bibliotecario</h4>
           <table style={{ marginTop: 8 }}>
             <thead>
@@ -602,6 +822,25 @@
               </tr>
             </tbody>
           </table>
+
+          {/* 2) Search */}
+          <SearchSection attributes={attributes} placeholder="Buscar bibliotecarios..." onChange={setSearch} />
+
+          {/* 3) Results */}
+          <table><thead><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Acciones</th></tr></thead>
+            <tbody>{filtered.map(b => (
+              <tr key={b.id}>
+                <td>{b.id}</td>
+                <td><input value={b.nombre || ''} onChange={e => { const u = { ...b, nombre: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.apellido || ''} onChange={e => { const u = { ...b, apellido: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.dni || ''} onChange={e => { const u = { ...b, dni: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.email || ''} onChange={e => { const u = { ...b, email: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} /></td>
+                <td><input value={b.telefono || ''} onChange={e => { const u = { ...b, telefono: e.target.value }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><input value={b.legajo || ''} onChange={e => { const u = { ...b, legajo: parseInt(e.target.value || 0) }; setList(prev => prev.map(x => x.id === b.id ? u : x)); scheduleSave(b.id, u); }} style={{ width: 80 }} /></td>
+                <td><button onClick={() => deleteBibl(b.id)}>Eliminar</button></td>
+              </tr>
+            ))}</tbody>
+          </table>
         </div>
       );
     }
@@ -612,13 +851,14 @@
       const [ejemplares, setEjemplares] = useState([]);
       const [libros, setLibros] = useState([]);
       const saves = useRef({});
+      const [search, setSearch] = useState({ attribute: 'cliente', query: '' });
 
       async function loadAll() {
         const [p, c, ej, l] = await Promise.all([
           safeFetchJson('/api/prestamos') || [],
           safeFetchJson('/api/clientes') || [],
           safeFetchJson('/api/ejemplares') || [],
-          safeFetchJson('/api/libros') || []
+          safeFetchJson('/api/libros/all') || []
         ]);
         setPrestamos(Array.isArray(p) ? p : []);
         setClientes(Array.isArray(c) ? c : []);
@@ -650,7 +890,7 @@
 
       async function deletePrestamo(id) { 
         if (!confirm('Eliminar préstamo ' + id + '?')) return; 
-        await fetch('/api/prestamos/' + id, { method: 'DELETE' }); 
+        await safeFetchJson('/api/prestamos/' + id, { method: 'DELETE' }); 
         loadAll(); 
       }
 
@@ -658,52 +898,58 @@
       const [newPrestamo, setNewPrestamo] = useState({ ejemplarId: '', clienteId: '', fechaInicio: '', fechaDevolucion: null });
       async function createPrestamo() {
         const payload = { ...newPrestamo };
-        if (payload.ejemplarId === '' || payload.clienteId === '' || payload.fechaInicio === '') { alert('Complete ejemplar, cliente y fecha de inicio'); return; }
+        const errors = [];
+        if (payload.ejemplarId === '' || isNaN(parseInt(payload.ejemplarId))) errors.push('Seleccione un ejemplar válido');
+        if (payload.clienteId === '' || isNaN(parseInt(payload.clienteId))) errors.push('Seleccione un cliente válido');
+        if (!validators.isDateISO(payload.fechaInicio)) errors.push('Fecha de inicio con formato inválido (dd-MM-yyyy)');
+        if (payload.fechaDevolucion && payload.fechaDevolucion !== '' && !validators.isDateISO(payload.fechaDevolucion)) errors.push('Fecha de devolución con formato inválido (dd-MM-yyyy)');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
         payload.ejemplarId = parseInt(payload.ejemplarId);
         payload.clienteId = parseInt(payload.clienteId);
         if (payload.fechaDevolucion === '') payload.fechaDevolucion = null;
-        await fetch('/api/prestamos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        setNewPrestamo({ ejemplarId: '', clienteId: '', fechaInicio: '', fechaDevolucion: null });
-        loadAll();
+        const res = await safeFetchJson('/api/prestamos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (res) { setNewPrestamo({ ejemplarId: '', clienteId: '', fechaInicio: '', fechaDevolucion: null }); loadAll(); window.displaySuccess('Préstamo creado correctamente'); }
       }
 
       function scheduleSavePrestamo(id, updated) {
         if (saves.current[id]) clearTimeout(saves.current[id]);
         saves.current[id] = setTimeout(async () => { 
-          await fetch('/api/prestamos/' + id, { 
+          const r = await safeFetchJson('/api/prestamos/' + id, { 
             method: 'PUT', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify(updated) 
           }); 
+          if (r !== null) window.displaySuccess('Préstamo actualizado correctamente');
           loadAll(); 
           delete saves.current[id]; 
-        }, 500);
+        }, 1000);
       }
+
+      const attributes = [ { value: 'cliente', label: 'Cliente' }, { value: 'ejemplar', label: 'Ejemplar' }, { value: 'fechaInicio', label: 'Fecha inicio' } ];
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return (prestamos || []);
+        return (prestamos || []).filter(p => {
+          if (search.attribute === 'cliente') {
+            const c = clienteById(p.clienteId);
+            return ((c && ((c.nombre||'') + ' ' + (c.apellido||'')).toLowerCase().includes(q)) || String(p.clienteId).includes(q));
+          }
+          if (search.attribute === 'ejemplar') {
+            const ej = ejemplarById(p.ejemplarId);
+            const lib = ej && libroById(ej.libroId);
+            const title = lib ? lib.titulo : '';
+            return (title.toLowerCase().includes(q) || String(p.ejemplarId).includes(q));
+          }
+          if (search.attribute === 'fechaInicio') return String(p.fechaInicio || '').toLowerCase().includes(q);
+          return false;
+        });
+      })();
 
       return (
         <div>
           <h3>Préstamos</h3>
-          <table>
-            <thead><tr><th>ID</th><th style={{ textAlign: 'left' }}>Ejemplar</th><th>Cliente</th><th>Inicio</th><th>Devolución</th><th>Acciones</th></tr></thead>
-            <tbody>{prestamos.map(p => (
-              <tr key={p.id}>
-                <td>{p.id}</td>
-                <td style={{ textAlign: 'left' }}>{ejemplarTitle(p.ejemplarId)}</td>
-                <td>{clienteNameFor(p.clienteId)}</td>
-                <td>{formatDate(p.fechaInicio)}</td>
-                {(p.fechaDevolucion === null) ?
-                <td>
-                  <input type="date" value={p.fechaDevolucion || ''} onChange={e => {
-                    const val = e.target.value || null;
-                    const updated = { ...p, fechaDevolucion: val };
-                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
-                    scheduleSavePrestamo(p.id, updated);
-                  }} />
-                </td> : <td>{formatDate(p.fechaDevolucion)}</td>}
-                <td><button onClick={() => deletePrestamo(p.id)}>Eliminar</button></td>
-              </tr>
-            ))}</tbody>
-          </table>
+
+          {/* 1) Add */}
           <h4>Agregar Préstamo</h4>
           <table style={{ marginTop: 8 }}>
             <thead>
@@ -715,10 +961,9 @@
                   <select value={newPrestamo.ejemplarId} onChange={e => setNewPrestamo({ ...newPrestamo, ejemplarId: e.target.value })}>
                     <option value="">Seleccione ejemplar</option>
                     {(() => {
-                      // Compute ejemplares that are not currently loaned (fechaDevolucion == null)
-                      const loanedEjIds = new Set(prestamos.filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
-                      return ejemplares.filter(ej => !loanedEjIds.has(String(ej.id))).map(ej => {
-                        const lib = libros.find(lb => String(lb.id) === String(ej.libroId));
+                      const loanedEjIds = new Set((prestamos || []).filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
+                      return (ejemplares || []).filter(ej => !loanedEjIds.has(String(ej.id))).map(ej => {
+                        const lib = (libros || []).find(lb => String(lb.id) === String(ej.libroId));
                         const title = lib ? lib.titulo : (`Libro ${ej.libroId}`);
                         return <option key={ej.id} value={ej.id}>{`Ej ${ej.id} - ${title}`}</option>;
                       });
@@ -731,11 +976,38 @@
                     {clientes.map(c => <option key={c.id} value={c.id}>{(c.nombre||'') + ' ' + (c.apellido||'') || (`Cliente ${c.id}`)}</option>)}
                   </select>
                 </td>
-                <td><input type="date" value={newPrestamo.fechaInicio} onChange={e => setNewPrestamo({ ...newPrestamo, fechaInicio: e.target.value })} /></td>
-                <td><input type="date" value={newPrestamo.fechaDevolucion || ''} onChange={e => setNewPrestamo({ ...newPrestamo, fechaDevolucion: e.target.value })} /></td>
+                <td><input type="date" value={formatDateForInput(newPrestamo.fechaInicio)} onChange={e => setNewPrestamo({ ...newPrestamo, fechaInicio: inputToDDMMYYYY(e.target.value) })} /></td>
+                <td><input type="date" value={formatDateForInput(newPrestamo.fechaDevolucion) || ''} onChange={e => setNewPrestamo({ ...newPrestamo, fechaDevolucion: inputToDDMMYYYY(e.target.value) })} /></td>
                 <td><button onClick={createPrestamo}>Crear Préstamo</button></td>
               </tr>
             </tbody>
+          </table>
+
+          {/* 2) Search */}
+          <SearchSection attributes={attributes} placeholder="Buscar préstamos..." onChange={setSearch} />
+
+          {/* 3) Results */}
+          <table>
+            <thead><tr><th>ID</th><th style={{ textAlign: 'left' }}>Ejemplar</th><th>Cliente</th><th>Inicio</th><th>Devolución</th><th>Acciones</th></tr></thead>
+            <tbody>{filtered.map(p => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td style={{ textAlign: 'left' }}>{ejemplarTitle(p.ejemplarId)}</td>
+                <td>{clienteNameFor(p.clienteId)}</td>
+                <td>{formatDate(p.fechaInicio)}</td>
+                {/*{(p.fechaDevolucion === null) ? */}
+                <td>
+                  <input type="date" value={formatDateForInput(p.fechaDevolucion) || ''} onChange={e => {
+                    const raw = e.target.value || '';
+                    const val = raw ? inputToDDMMYYYY(raw) : null;
+                    const updated = { ...p, fechaDevolucion: val };
+                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
+                    scheduleSavePrestamo(p.id, updated);
+                  }} />
+                </td> {/*: <td>{formatDate(p.fechaDevolucion)}</td>}} */}
+                <td><button onClick={() => deletePrestamo(p.id)}>Eliminar</button></td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       );
@@ -755,16 +1027,22 @@
       async function save() {
         setLoading(true);
         try {
+          const errors = [];
+          if (!validators.notBlank(biblio.nombre)) errors.push('Nombre de biblioteca es obligatorio');
+          if (!validators.notBlank(biblio.direccion)) errors.push('Dirección es obligatoria');
+          if (biblio.email && !validators.isEmail(biblio.email)) errors.push('Email con formato inválido');
+          if (biblio.telefono && !validators.isPhone(biblio.telefono)) errors.push('Teléfono con formato inválido');
+          if (errors.length) { window.displayError(errors.join('; ')); setLoading(false); return; }
+
           if (biblio.id) {
-            await fetch('/api/bibliotecas/' + biblio.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
+            await safeFetchJson('/api/bibliotecas/' + biblio.id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
           } else {
-            const res = await fetch('/api/bibliotecas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
-            const created = await res.json();
-            setBiblio(created);
+            const created = await safeFetchJson('/api/bibliotecas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(biblio) });
+            if (created) setBiblio(created);
           }
           await load();
-          alert('Guardado');
-        } catch (e) { alert('Error al guardar'); }
+          window.displaySuccess('Guardado');
+  } catch (e) { window.displayError('Error al guardar'); }
         setLoading(false);
       }
 
@@ -793,6 +1071,7 @@
       const [clientes, setClientes] = useState([]);
       const saves = useRef({});
       const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '', reservedBooks: 0 });
+      const [search, setSearch] = useState({ attribute: 'nombre', query: '' });
 
       async function loadAll() {
         const c = await safeFetchJson('/api/clientes') || [];
@@ -801,37 +1080,83 @@
 
       useEffect(() => { loadAll(); }, []);
 
-      async function deleteCliente(id) { if (!confirm('Eliminar cliente ' + id + '?')) return; await fetch('/api/clientes/' + id, { method: 'DELETE' }); loadAll(); }
+      async function deleteCliente(id) { if (!confirm('Eliminar cliente ' + id + '?')) return; await safeFetchJson('/api/clientes/' + id, { method: 'DELETE' }); loadAll(); }
 
       async function addCliente() {
+        const errors = [];
+        if (!validators.notBlank(form.nombre) || !validators.isName(form.nombre)) errors.push('Nombre inválido');
+        if (!validators.notBlank(form.apellido) || !validators.isName(form.apellido)) errors.push('Apellido inválido');
+        if (form.email && !validators.isEmail(form.email)) errors.push('Email con formato inválido');
+        if (form.telefono && !validators.isPhone(form.telefono)) errors.push('Teléfono con formato inválido');
+        if (form.dni && isNaN(parseInt(form.dni))) errors.push('DNI debe ser numérico');
+        if (form.legajo && isNaN(parseInt(form.legajo))) errors.push('Legajo debe ser numérico');
+        if (errors.length) { window.displayError(errors.join('; ')); return; }
         const payload = { ...form };
         if (payload.legajo === '') payload.legajo = null; else payload.legajo = parseInt(payload.legajo);
         if (payload.dni === '') payload.dni = null; else payload.dni = parseInt(payload.dni);
         payload.reservedBooks = parseInt(payload.reservedBooks || 0);
-        await fetch('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '', reservedBooks: 0 });
-        loadAll();
+  const res = await safeFetchJson('/api/clientes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (res) { setForm({ nombre: '', apellido: '', dni: '', email: '', telefono: '', legajo: '', reservedBooks: 0 }); loadAll(); window.displaySuccess('Cliente agregado correctamente'); }
       }
 
       function scheduleSaveCliente(id, updated) {
         if (saves.current['c'+id]) clearTimeout(saves.current['c'+id]);
         saves.current['c'+id] = setTimeout(async () => { 
-          await fetch('/api/clientes/' + id, { 
+          const r = await safeFetchJson('/api/clientes/' + id, { 
             method: 'PUT', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify(updated) }
           ); 
+          if (r !== null) window.displaySuccess('Cliente actualizado correctamente');
           loadAll(); 
           delete saves.current['c'+id]; 
-        }, 500);
+        }, 1000);
       }
+
+      const attributes = [ { value: 'nombre', label: 'Nombre' }, { value: 'apellido', label: 'Apellido' }, { value: 'dni', label: 'DNI' }, { value: 'legajo', label: 'Legajo' } ];
+      const filtered = (() => {
+        const q = (search.query || '').toLowerCase().trim();
+        if (!q) return clientes;
+        return (clientes || []).filter(c => {
+          if (search.attribute === 'nombre') return (c.nombre || '').toLowerCase().includes(q);
+          if (search.attribute === 'apellido') return (c.apellido || '').toLowerCase().includes(q);
+          if (search.attribute === 'dni') return String(c.dni || '').includes(q);
+          if (search.attribute === 'legajo') return String(c.legajo || '').includes(q);
+          return false;
+        });
+      })();
 
       return (
         <div>
           <h3>Clientes</h3>
+
+          {/* 1) Add */}
+          <h4>Agregar Cliente</h4>
+          <table style={{ marginTop: 8 }}>
+            <thead>
+              <tr><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Reservados</th><th>Acciones</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
+                <td><input placeholder="Apellido" value={form.apellido} onChange={e => setForm({ ...form, apellido: e.target.value })} /></td>
+                <td><input placeholder="DNI" value={form.dni} onChange={e => setForm({ ...form, dni: e.target.value })} style={{ width: 90 }} /></td>
+                <td><input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={{ width: 150 }} /></td>
+                <td><input placeholder="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={{ width: 110 }} /></td>
+                <td><input placeholder="Legajo" value={form.legajo} onChange={e => setForm({ ...form, legajo: e.target.value })} style={{ width: 90 }} /></td>
+                <td><input type="number" placeholder="Reservados" value={form.reservedBooks} onChange={e => setForm({ ...form, reservedBooks: e.target.value })} style={{ width: 110 }} /></td>
+                <td><button onClick={addCliente}>Agregar</button></td>
+              </tr>
+            </tbody>
+          </table>
+
+          {/* 2) Search */}
+          <SearchSection attributes={attributes} placeholder="Buscar clientes..." onChange={setSearch} />
+
+          {/* 3) Results */}
           <table>
             <thead><tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Libros Reservados</th><th>Acciones</th></tr></thead>
-            <tbody>{clientes.map(c => {
+            <tbody>{filtered.map(c => {
               return (
                 <tr key={c.id}>
                   <td>{c.id}</td>
@@ -855,29 +1180,12 @@
               );
             })}</tbody>
           </table>
-          <h4>Agregar Cliente</h4>
-          <table style={{ marginTop: 8 }}>
-            <thead>
-              <tr><th>Nombre</th><th>Apellido</th><th>DNI</th><th>Email</th><th>Teléfono</th><th>Legajo</th><th>Reservados</th><th>Acciones</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><input placeholder="Nombre" value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} /></td>
-                <td><input placeholder="Apellido" value={form.apellido} onChange={e => setForm({ ...form, apellido: e.target.value })} /></td>
-                <td><input placeholder="DNI" value={form.dni} onChange={e => setForm({ ...form, dni: e.target.value })} style={{ width: 90 }} /></td>
-                <td><input placeholder="Email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} style={{ width: 150 }} /></td>
-                <td><input placeholder="Teléfono" value={form.telefono} onChange={e => setForm({ ...form, telefono: e.target.value })} style={{ width: 110 }} /></td>
-                <td><input placeholder="Legajo" value={form.legajo} onChange={e => setForm({ ...form, legajo: e.target.value })} style={{ width: 90 }} /></td>
-                <td><input type="number" placeholder="Reservados" value={form.reservedBooks} onChange={e => setForm({ ...form, reservedBooks: e.target.value })} style={{ width: 110 }} /></td>
-                <td><button onClick={addCliente}>Agregar</button></td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       );
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
   </script>
 </body>
 

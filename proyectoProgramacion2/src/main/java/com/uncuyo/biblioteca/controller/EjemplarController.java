@@ -4,6 +4,7 @@ import com.uncuyo.biblioteca.model.Ejemplar;
 import com.uncuyo.biblioteca.service.AdministradorService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -21,10 +22,10 @@ public class EjemplarController {
     public ResponseEntity<Ejemplar> get(@PathVariable Long id) { Ejemplar e = service.consultarEjemplar(id); if (e == null) return ResponseEntity.notFound().build(); return ResponseEntity.ok(e); }
 
     @PostMapping
-    public Ejemplar create(@RequestBody Ejemplar e) { return service.agregar(e); }
+    public Ejemplar create(@Valid @RequestBody Ejemplar e) { return service.agregar(e); }
 
     @PutMapping("/{id}")
-    public Ejemplar update(@PathVariable Long id, @RequestBody Ejemplar e) { e.setId(id); return service.agregar(e); }
+    public Ejemplar update(@PathVariable Long id, @Valid @RequestBody Ejemplar e) { e.setId(id); return service.agregar(e); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarEjemplar(id); return ResponseEntity.noContent().build(); }

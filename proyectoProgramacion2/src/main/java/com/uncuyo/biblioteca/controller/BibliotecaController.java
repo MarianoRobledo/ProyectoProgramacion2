@@ -4,6 +4,7 @@ import com.uncuyo.biblioteca.model.Biblioteca;
 import com.uncuyo.biblioteca.service.AdministradorService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -21,10 +22,10 @@ public class BibliotecaController {
     public ResponseEntity<Biblioteca> get(@PathVariable Long id) { Biblioteca b = service.consultarBiblioteca(id); if (b == null) return ResponseEntity.notFound().build(); return ResponseEntity.ok(b); }
 
     @PostMapping
-    public Biblioteca create(@RequestBody Biblioteca b) { return service.agregar(b); }
+    public Biblioteca create(@Valid @RequestBody Biblioteca b) { return service.agregar(b); }
 
     @PutMapping("/{id}")
-    public Biblioteca update(@PathVariable Long id, @RequestBody Biblioteca b) { b.setId(id); return service.agregar(b); }
+    public Biblioteca update(@PathVariable Long id, @Valid @RequestBody Biblioteca b) { b.setId(id); return service.agregar(b); }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarBiblioteca(id); return ResponseEntity.noContent().build(); }

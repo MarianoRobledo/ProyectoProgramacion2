@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS libro (
   editorial_id INTEGER,
   anioPublicacion INTEGER,
   autor_id INTEGER,
-  disponible INTEGER DEFAULT 1,
   visible BOOLEAN DEFAULT TRUE,
   FOREIGN KEY(editorial_id) REFERENCES editorial(id),
   FOREIGN KEY(autor_id) REFERENCES autor(id)

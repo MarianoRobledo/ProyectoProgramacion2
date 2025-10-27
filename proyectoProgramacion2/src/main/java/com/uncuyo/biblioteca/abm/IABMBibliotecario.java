@@ -1,6 +1,5 @@
 package com.uncuyo.biblioteca.abm;
 
-import com.uncuyo.biblioteca.model.Bibliotecario;
 import com.uncuyo.biblioteca.model.Cliente;
 import com.uncuyo.biblioteca.model.Prestamo;
 import java.util.List;

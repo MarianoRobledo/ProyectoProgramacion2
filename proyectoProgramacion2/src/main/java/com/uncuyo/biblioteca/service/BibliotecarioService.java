@@ -1,14 +1,13 @@
 package com.uncuyo.biblioteca.service;
 
 import com.uncuyo.biblioteca.abm.IABMBibliotecario;
-import com.uncuyo.biblioteca.model.Bibliotecario;
 import com.uncuyo.biblioteca.model.Cliente;
 import com.uncuyo.biblioteca.model.Prestamo;
 import com.uncuyo.biblioteca.repository.*;
-import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import com.uncuyo.biblioteca.exception.DuplicateResourceException;
 
 @Service
 public class BibliotecarioService implements IABMBibliotecario {
@@ -23,6 +22,12 @@ public class BibliotecarioService implements IABMBibliotecario {
 
     @Override
     public Cliente agregar(Cliente c) {
+        Cliente existingByDni = clienteRepo.findByDni(c.getDni());
+        if (existingByDni != null && (c.getId() == null || !existingByDni.getId().equals(c.getId())))
+            throw new DuplicateResourceException("Ya existe un cliente con DNI " + c.getDni());
+        Cliente existingByLegajo = clienteRepo.findByLegajo(c.getLegajo());
+        if (existingByLegajo != null && (c.getId() == null || !existingByLegajo.getId().equals(c.getId())))
+            throw new DuplicateResourceException("Ya existe un cliente con legajo " + c.getLegajo());
         return clienteRepo.save(c);
     }
 

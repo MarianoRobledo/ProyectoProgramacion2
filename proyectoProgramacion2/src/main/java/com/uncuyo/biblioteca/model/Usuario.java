@@ -1,19 +1,12 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package com.uncuyo.biblioteca.model;
 
-/**
- *
- * @author mariano-ubuntu
- */
-public class Usuario extends Persona{
+import jakarta.validation.constraints.Min;
+
+public class Usuario extends Persona {
     
+    @Min(value = 0, message = "Legajo inválido")
     protected int legajo;
 
-    
-    
     public int getLegajo() {
         return legajo;
     }
@@ -21,8 +14,5 @@ public class Usuario extends Persona{
     public void setLegajo(int legajo) {
         this.legajo = legajo;
     }
-    
-    
-    
     
 }

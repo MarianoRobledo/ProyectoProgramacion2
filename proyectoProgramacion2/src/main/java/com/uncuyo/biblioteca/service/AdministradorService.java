@@ -13,6 +13,8 @@ import com.uncuyo.biblioteca.model.Libro;
 import com.uncuyo.biblioteca.model.Prestamo;
 import com.uncuyo.biblioteca.repository.*;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import com.uncuyo.biblioteca.exception.DuplicateResourceException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -44,6 +46,9 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Administrador agregar(Administrador a) {
+        // prevent duplicate DNI for administrators
+        Administrador existing = administradorRepo.findByDni(a.getDni());
+        if (existing != null) throw new DuplicateResourceException("Ya existe un administrador con DNI " + a.getDni());
         return administradorRepo.save(a);
     }
 
@@ -94,6 +99,9 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Bibliotecario agregar(Bibliotecario b) {
+        Bibliotecario existing = bibliotecarioRepo.findByDni(b.getDni());
+        if (existing != null && (b.getId() == null || !existing.getId().equals(b.getId())))
+            throw new DuplicateResourceException("Ya existe un bibliotecario con DNI " + b.getDni());
         return bibliotecarioRepo.save(b);
     }
 
@@ -119,6 +127,12 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Cliente agregar(Cliente c) {
+        Cliente existingByDni = clienteRepo.findByDni(c.getDni());
+        if (existingByDni != null && (c.getId() == null || !existingByDni.getId().equals(c.getId())))
+            throw new DuplicateResourceException("Ya existe un cliente con DNI " + c.getDni());
+        Cliente existingByLegajo = clienteRepo.findByLegajo(c.getLegajo());
+        if (existingByLegajo != null && (c.getId() == null || !existingByLegajo.getId().equals(c.getId())))
+            throw new DuplicateResourceException("Ya existe un cliente con legajo " + c.getLegajo());
         return clienteRepo.save(c);
     }
 
@@ -195,6 +209,13 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Libro agregar(Libro l) {
+        // prevent duplicate ISBN
+        if (l.getIsbn() != null) {
+            Libro exists = libroRepo.findByIsbn(l.getIsbn());
+            if (exists != null && (l.getId() == null || !exists.getId().equals(l.getId()))) {
+                throw new DuplicateResourceException("Ya existe un libro con ISBN " + l.getIsbn());
+            }
+        }
         return libroRepo.save(l);
     }
 
@@ -213,6 +234,10 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
         return libroRepo.findAll();
     }
     
+    public List<Libro> consultarLibrosAll() {
+        return libroRepo.findAllIncludeInvisible();
+    }
+    
     @Override
     public Libro consultarLibro(Long id) {
         return libroRepo.findById(id);
@@ -225,6 +250,37 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Prestamo modificar(Prestamo p) {
+        // If fechaDevolucion is being set/modified, validate it is not before fechaInicio
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        if (p.getFechaDevolucion() != null && !p.getFechaDevolucion().isBlank()) {
+            // need the inicio date: prefer the incoming one, otherwise fetch existing record
+            String inicioStr = p.getFechaInicio();
+            if (inicioStr == null || inicioStr.isBlank()) {
+                if (p.getId() == null) {
+                    throw new IllegalStateException("No se proporcionó la fecha de inicio ni el id del préstamo");
+                }
+                Prestamo existing = prestamoRepo.findById(p.getId());
+                if (existing == null) {
+                    throw new IllegalStateException("Préstamo no encontrado");
+                }
+                inicioStr = existing.getFechaInicio();
+            }
+            LocalDate inicio;
+            LocalDate devolucion;
+            try {
+                inicio = LocalDate.parse(inicioStr, fmt);
+            } catch (Exception ex) {
+                throw new IllegalStateException("Formato de fecha de inicio inválido");
+            }
+            try {
+                devolucion = LocalDate.parse(p.getFechaDevolucion(), fmt);
+            } catch (Exception ex) {
+                throw new IllegalStateException("Formato de fecha de devolución inválido");
+            }
+            if (devolucion.isBefore(inicio)) {
+                throw new IllegalArgumentException("La fecha de devolución no puede ser anterior a la fecha de inicio del préstamo");
+            }
+        }
         return prestamoRepo.save(p);
     }
 
@@ -245,7 +301,19 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     public void closeLoan(Long id) {
         Prestamo p = prestamoRepo.findById(id);
-        p.setFechaDevolucion(LocalDate.now().toString());
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+        // parse fechaInicio and ensure devolución (today) is not before inicio
+        LocalDate inicio;
+        try {
+            inicio = LocalDate.parse(p.getFechaInicio(), fmt);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Formato de fecha de inicio inválido");
+        }
+        LocalDate hoy = LocalDate.now();
+        if (hoy.isBefore(inicio)) {
+            throw new IllegalArgumentException("La fecha de devolución no puede ser anterior a la fecha de inicio del préstamo");
+        }
+        p.setFechaDevolucion(hoy.format(fmt));
         prestamoRepo.save(p);
     }
     

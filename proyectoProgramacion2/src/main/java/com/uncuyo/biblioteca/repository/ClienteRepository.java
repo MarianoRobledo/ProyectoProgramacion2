@@ -52,6 +52,15 @@ public class ClienteRepository {
         }
     }
 
+    public Cliente findByLegajo(Integer legajo) {
+        if (legajo == null) return null;
+        try {
+            return jdbc.queryForObject("SELECT c.id as c_id, c.persona_id, c.legajo, c.reserved_books, p.* FROM cliente c JOIN persona p ON c.persona_id = p.id WHERE c.legajo = ?", mapper, legajo);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     public Cliente save(Cliente c) {
         if (c.getId() == null) {
             // insert persona first

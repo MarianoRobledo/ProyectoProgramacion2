@@ -23,11 +23,16 @@ public class LibroRepository {
         l.setEditorialId(rs.getLong("editorial_id"));
         l.setAnioPublicacion(rs.getInt("anioPublicacion"));
         l.setAutorId(rs.getLong("autor_id"));
-        l.setDisponible(rs.getInt("disponible") == 1);
+        try { l.setVisible(rs.getBoolean("visible")); } catch (Exception ex) { l.setVisible(Boolean.TRUE); }
         return l;
     };
 
     public List<Libro> findAll() {
+        // only return visible books for regular listings
+        return jdbc.query("SELECT * FROM libro WHERE visible = 1", mapper);
+    }
+
+    public List<Libro> findAllIncludeInvisible() {
         return jdbc.query("SELECT * FROM libro", mapper);
     }
 
@@ -37,21 +42,28 @@ public class LibroRepository {
 
     public Libro save(Libro libro) {
         if (libro.getId() == null) {
-        int disponibleInt = libro.getDisponible() == null ? 1 : (libro.getDisponible() ? 1 : 0);
-        jdbc.update("INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id,disponible) VALUES(?,?,?,?,?,?)",
-            libro.getIsbn(), libro.getTitulo(), libro.getEditorialId(), libro.getAnioPublicacion(), libro.getAutorId(), disponibleInt);
+        int visibleInt = libro.getVisible() == null ? 1 : (libro.getVisible() ? 1 : 0);
+        jdbc.update("INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id,visible) VALUES(?,?,?,?,?,?)",
+            libro.getIsbn(), libro.getTitulo(), libro.getEditorialId(), libro.getAnioPublicacion(), libro.getAutorId(), visibleInt);
             Long id = jdbc.queryForObject("SELECT last_insert_rowid()", Long.class);
             libro.setId(id);
             return libro;
         } else {
-        int disponibleInt = libro.getDisponible() == null ? 1 : (libro.getDisponible() ? 1 : 0);
-        jdbc.update("UPDATE libro SET isbn=?, titulo=?, editorial_id=?, anioPublicacion=?, autor_id=?, disponible=? WHERE id=?",
-            libro.getIsbn(), libro.getTitulo(), libro.getEditorialId(), libro.getAnioPublicacion(), libro.getAutorId(), disponibleInt, libro.getId());
+        int visibleInt = libro.getVisible() == null ? 1 : (libro.getVisible() ? 1 : 0);
+        jdbc.update("UPDATE libro SET isbn=?, titulo=?, editorial_id=?, anioPublicacion=?, autor_id=?, visible=? WHERE id=?",
+            libro.getIsbn(), libro.getTitulo(), libro.getEditorialId(), libro.getAnioPublicacion(), libro.getAutorId(), visibleInt, libro.getId());
             return libro;
         }
     }
 
     public void deleteById(Long id) {
-        jdbc.update("DELETE FROM libro WHERE id = ?", id);
+        // logical delete: mark as not visible
+        jdbc.update("UPDATE libro SET visible = 0 WHERE id = ?", id);
+    }
+
+    public Libro findByIsbn(String isbn) {
+        try {
+            return jdbc.queryForObject("SELECT * FROM libro WHERE isbn = ?", mapper, isbn);
+        } catch (Exception ex) { return null; }
     }
 }

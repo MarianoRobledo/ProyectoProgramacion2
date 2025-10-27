@@ -1,8 +1,13 @@
 package com.uncuyo.biblioteca.model;
 
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
+
 public class Cliente extends Persona {
     private Long id;
     private Long personaId;
+    @NotNull(message = "El legajo es obligatorio")
+    @Min(value = 1, message = "Legajo inválido")
     private Integer legajo;
     private Integer reservedBooks = 0;
 

@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import com.uncuyo.biblioteca.exception.DuplicateResourceException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -133,6 +134,9 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
         Cliente existingByLegajo = clienteRepo.findByLegajo(c.getLegajo());
         if (existingByLegajo != null && (c.getId() == null || !existingByLegajo.getId().equals(c.getId())))
             throw new DuplicateResourceException("Ya existe un cliente con legajo " + c.getLegajo());
+        Cliente existingByEmail = clienteRepo.findByEmail(c.getEmail());
+        if (existingByEmail != null && (c.getId() == null || !existingByEmail.getId().equals(c.getId())))
+            throw new DuplicateResourceException("Ya existe un cliente con email " + c.getEmail());
         return clienteRepo.save(c);
     }
 
@@ -245,7 +249,16 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Prestamo agregar(Prestamo p) {
-        return prestamoRepo.save(p);
+        Prestamo saved = prestamoRepo.save(p);
+        try {
+            Cliente c = clienteRepo.findById(saved.getClienteId());
+            if (c != null) {
+                Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                c.setReservedBooks(curr + 1);
+                clienteRepo.save(c);
+            }
+        } catch (Exception ignored) {}
+        return saved;
     }
 
     @Override
@@ -281,12 +294,49 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
                 throw new IllegalArgumentException("La fecha de devolución no puede ser anterior a la fecha de inicio del préstamo");
             }
         }
-        return prestamoRepo.save(p);
+        // detect if we are closing the loan now (fechaDevolucion was empty before and now set)
+        boolean closingNow = false;
+        if (p.getFechaDevolucion() != null && !p.getFechaDevolucion().isBlank() && p.getId() != null) {
+            try {
+                Prestamo existing = prestamoRepo.findById(p.getId());
+                if (existing != null) {
+                    String oldDev = existing.getFechaDevolucion();
+                    if (oldDev == null || oldDev.isBlank()) closingNow = true;
+                }
+            } catch (Exception ignored) { closingNow = false; }
+        }
+
+        Prestamo saved = prestamoRepo.save(p);
+
+        if (closingNow) {
+            try {
+                Cliente c = clienteRepo.findById(saved.getClienteId());
+                if (c != null) {
+                    Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                    c.setReservedBooks(Math.max(0, curr - 1));
+                    clienteRepo.save(c);
+                }
+            } catch (Exception ignored) {}
+        }
+        return saved;
     }
 
     @Override
+    @Transactional
     public void eliminarPrestamo(Long id) {
-        prestamoRepo.deleteById(id);
+        Prestamo p = null;
+        try { p = prestamoRepo.findById(id); } catch (Exception ignored) { p = null; }
+        if (p != null) {
+            prestamoRepo.deleteById(id);
+            try {
+                Cliente c = clienteRepo.findById(p.getClienteId());
+                if (c != null) {
+                    Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                    c.setReservedBooks(Math.max(0, curr - 1));
+                    clienteRepo.save(c);
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override

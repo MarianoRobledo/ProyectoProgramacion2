@@ -5,6 +5,7 @@ import com.uncuyo.biblioteca.model.Cliente;
 import com.uncuyo.biblioteca.model.Prestamo;
 import com.uncuyo.biblioteca.repository.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import com.uncuyo.biblioteca.exception.DuplicateResourceException;
@@ -54,17 +55,66 @@ public class BibliotecarioService implements IABMBibliotecario {
     
     @Override
     public Prestamo agregar(Prestamo p) {
-        return prestamoRepo.save(p);
+        Prestamo saved = prestamoRepo.save(p);
+        // Increment reservedBooks only if the loan is active (no fechaDevolucion)
+        if (saved.getFechaDevolucion() == null || saved.getFechaDevolucion().isBlank()) {
+            try {
+                Cliente c = clienteRepo.findById(saved.getClienteId());
+                if (c != null) {
+                    Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                    c.setReservedBooks(curr + 1);
+                    clienteRepo.save(c);
+                }
+            } catch (Exception ignored) {}
+        }
+        return saved;
     }
 
     @Override
     public Prestamo modificar(Prestamo p) {
-        return prestamoRepo.save(p);
+        boolean closingNow = false;
+        // If fechaDevolucion is provided and previously was empty, we consider the loan finished
+        if (p.getFechaDevolucion() != null && !p.getFechaDevolucion().isBlank() && p.getId() != null) {
+            try {
+                Prestamo existing = prestamoRepo.findById(p.getId());
+                if (existing != null) {
+                    String oldDev = existing.getFechaDevolucion();
+                    if (oldDev == null || oldDev.isBlank()) closingNow = true;
+                }
+            } catch (Exception ignored) { closingNow = false; }
+        }
+
+        Prestamo saved = prestamoRepo.save(p);
+
+        if (closingNow) {
+            try {
+                Cliente c = clienteRepo.findById(saved.getClienteId());
+                if (c != null) {
+                    Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                    c.setReservedBooks(Math.max(0, curr - 1));
+                    clienteRepo.save(c);
+                }
+            } catch (Exception ignored) {}
+        }
+        return saved;
     }
 
     @Override
+    @Transactional
     public void eliminarPrestamo(Long id) {
-        prestamoRepo.deleteById(id);
+        Prestamo p = null;
+        try { p = prestamoRepo.findById(id); } catch (Exception ignored) { p = null; }
+        if (p != null) {
+            prestamoRepo.deleteById(id);
+            try {
+                Cliente c = clienteRepo.findById(p.getClienteId());
+                if (c != null) {
+                    Integer curr = c.getReservedBooks() == null ? 0 : c.getReservedBooks();
+                    c.setReservedBooks(Math.max(0, curr - 1));
+                    clienteRepo.save(c);
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override

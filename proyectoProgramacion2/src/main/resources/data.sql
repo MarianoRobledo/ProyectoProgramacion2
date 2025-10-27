@@ -31,7 +31,7 @@ INSERT INTO persona(nombre,apellido,fechaNacimiento,telefono,email,dni) VALUES('
 INSERT INTO persona(nombre,apellido,fechaNacimiento,telefono,email,dni) VALUES('Mario','Rossi','12-11-1970','555-3000','mario@example.com',40123456);
 
 -- Clientes: associate persona_id, legajo, reserved_books
-INSERT INTO cliente(persona_id,legajo,reserved_books) VALUES(1,5001,0);
+INSERT INTO cliente(persona_id,legajo,reserved_books) VALUES(1,5001,2);
 INSERT INTO cliente(persona_id,legajo,reserved_books) VALUES(2,5002,1);
 
 -- Bibliotecarios / Administradores

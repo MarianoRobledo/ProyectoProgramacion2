@@ -61,6 +61,15 @@ public class ClienteRepository {
         }
     }
 
+    public Cliente findByEmail(String email) {
+        if (email == null) return null;
+        try {
+            return jdbc.queryForObject("SELECT c.id as c_id, c.persona_id, c.legajo, c.reserved_books, p.* FROM cliente c JOIN persona p ON c.persona_id = p.id WHERE p.email = ?", mapper, email);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     public Cliente save(Cliente c) {
         if (c.getId() == null) {
             // insert persona first

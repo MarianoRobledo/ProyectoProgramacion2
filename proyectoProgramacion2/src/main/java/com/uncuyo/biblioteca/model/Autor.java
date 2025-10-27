@@ -3,7 +3,7 @@ package com.uncuyo.biblioteca.model;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-public class Autor extends Persona{
+public class Autor {
     private Long id;
 
     @NotBlank(message = "El nombre del autor es obligatorio")

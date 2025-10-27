@@ -103,11 +103,21 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
         Bibliotecario existing = bibliotecarioRepo.findByDni(b.getDni());
         if (existing != null && (b.getId() == null || !existing.getId().equals(b.getId())))
             throw new DuplicateResourceException("Ya existe un bibliotecario con DNI " + b.getDni());
+        Bibliotecario existingByLegajo = bibliotecarioRepo.findByLegajo(b.getLegajo());
+        if (existingByLegajo != null && (b.getId() == null || !existingByLegajo.getId().equals(b.getId())))
+            throw new DuplicateResourceException("Ya existe un bibliotecario con legajo " + b.getLegajo());
         return bibliotecarioRepo.save(b);
     }
 
     @Override
     public Bibliotecario modificar(Bibliotecario b) {
+        // validate duplicates for dni and legajo when modifying
+        Bibliotecario existing = bibliotecarioRepo.findByDni(b.getDni());
+        if (existing != null && (b.getId() == null || !existing.getId().equals(b.getId())))
+            throw new DuplicateResourceException("Ya existe un bibliotecario con DNI " + b.getDni());
+        Bibliotecario existingByLegajo = bibliotecarioRepo.findByLegajo(b.getLegajo());
+        if (existingByLegajo != null && (b.getId() == null || !existingByLegajo.getId().equals(b.getId())))
+            throw new DuplicateResourceException("Ya existe un bibliotecario con legajo " + b.getLegajo());
         return bibliotecarioRepo.save(b);
     }
 
@@ -233,6 +243,11 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
         libroRepo.deleteById(id);
     }
 
+    // restore a logically deleted book
+    public void restaurarLibro(Long id) {
+        libroRepo.restoreById(id);
+    }
+
     @Override
     public List<Libro> consultarLibros() {
         return libroRepo.findAll();
@@ -249,6 +264,22 @@ public class AdministradorService implements IABMAdministrador, IABMBibliotecari
 
     @Override
     public Prestamo agregar(Prestamo p) {
+        // validate that the ejemplar's libro is visible before creating the loan
+        try {
+            Ejemplar ej = ejemplarRepo.findById(p.getEjemplarId());
+            if (ej == null) throw new IllegalStateException("Ejemplar no encontrado");
+            Libro lib = libroRepo.findById(ej.getLibroId());
+            if (lib == null) throw new IllegalStateException("Libro del ejemplar no encontrado");
+            if (lib.getVisible() != null && !lib.getVisible()) {
+                throw new IllegalStateException("No se puede prestar un libro eliminado/no visible");
+            }
+        } catch (IllegalStateException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            // if repository throws on missing rows, map to a clear error
+            throw new IllegalStateException("Error al validar el ejemplar/libro: " + ex.getMessage());
+        }
+
         Prestamo saved = prestamoRepo.save(p);
         try {
             Cliente c = clienteRepo.findById(saved.getClienteId());

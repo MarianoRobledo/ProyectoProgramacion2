@@ -332,15 +332,7 @@
               <tr key={p.id}>
                 <td>{p.id}</td>
                 <td style={{textAlign: 'left'}}>{ejemplarTitle(p.ejemplarId)}</td>
-                <td>
-                  <input type="date" value={formatDateForInput(p.fechaInicio) || ''} onChange={e => {
-                    const raw = e.target.value || '';
-                    const val = raw ? inputToDDMMYYYY(raw) : null;
-                    const updated = { ...p, fechaInicio: val };
-                    setPrestamos(prev => prev.map(x => x.id === p.id ? updated : x));
-                    scheduleSavePrestamo(p.id, updated);
-                  }} />
-                </td>
+                <td>{formatDateForInput(p.fechaInicio)}</td>
                 {(p.fechaDevolucion != null) ? (<td>{formatDate(p.fechaDevolucion)}</td>) : (<td>--</td>)}
               </tr>
             ))}</tbody>
@@ -406,12 +398,14 @@
       const [ejemplares, setEjemplares] = useState([]);
       const [prestamos, setPrestamos] = useState([]);
       const [form, setForm] = useState({ titulo: '', isbn: '', autorId: '', editorialId: '' });
+      const [showDeleted, setShowDeleted] = useState(false);
       const [search, setSearch] = useState({ attribute: 'titulo', query: '' });
       const saves = useRef({});
 
       async function loadAll() {
+        const librosUrl = showDeleted ? '/api/libros/all' : '/api/libros';
         const [l, a, e, ex, p] = await Promise.all([
-          safeFetchJson('/api/libros') || [],
+          safeFetchJson(librosUrl) || [],
           safeFetchJson('/api/autores') || [],
           safeFetchJson('/api/editoriales') || [],
           safeFetchJson('/api/ejemplares') || [],
@@ -424,7 +418,7 @@
         setPrestamos(Array.isArray(p) ? p : []);
       }
 
-      useEffect(() => { loadAll(); }, []);
+      useEffect(() => { loadAll(); }, [showDeleted]);
 
       async function addBook() {
         // client-side validation
@@ -439,7 +433,17 @@
           window.displaySuccess('Libro agregado correctamente');
         }
       }
-      async function deleteBook(id) { if (!confirm('Eliminar libro ' + id + '?')) return; await safeFetchJson('/api/libros/' + id, { method: 'DELETE' }); loadAll(); }
+      async function deleteBook(id) { 
+        if (!confirm('Eliminar libro ' + id + '?')) return; 
+        await safeFetchJson('/api/libros/' + id, { method: 'DELETE' }); 
+        loadAll(); 
+      }
+      async function restoreBook(id) { 
+        if (!confirm('Restaurar libro ' + id + '?')) return; 
+        await safeFetchJson('/api/libros/' + id + '/restore', { method: 'PUT' }); 
+        loadAll(); 
+        window.displaySuccess('Libro restaurado correctamente'); 
+      }
 
       function scheduleSave(id, updated) {
         if (saves.current[id]) clearTimeout(saves.current[id]);
@@ -536,6 +540,9 @@
           <SearchSection attributes={attributes} placeholder="Buscar libros..." onChange={setSearch} />
 
           {/* 3) Results */}
+          <div style={{ marginTop: 8, marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center' }}>
+            <label style={{ fontWeight: 'normal' }}><input type="checkbox" checked={showDeleted} onChange={e => setShowDeleted(e.target.checked)} /> Mostrar eliminados</label>
+          </div>
           <table style={{ marginTop: 12 }}><thead><tr><th>ID</th><th>Título</th><th>ISBN</th><th>Autor</th><th>Editorial</th><th>Total</th><th>Prestados</th><th>Disponibles</th><th>Acciones</th></tr></thead>
             <tbody>{filtered.map(l => {
               const s = statsFor(l.id);
@@ -552,7 +559,11 @@
                 <td>
                   <button onClick={() => increase(l.id)} style={{ marginRight: 6 }}>+</button>
                   <button onClick={() => decrease(l.id)} disabled={s.available <= 0}>-</button>
-                  <button style={{ marginLeft: 8 }} onClick={() => deleteBook(l.id)}>Eliminar</button>
+                  { (l.visible === false) ? (
+                    <button style={{ marginLeft: 8 }} onClick={() => restoreBook(l.id)}>Restaurar</button>
+                  ) : (
+                    <button style={{ marginLeft: 8 }} onClick={() => deleteBook(l.id)}>Eliminar</button>
+                  ) }
                 </td>
               </tr>
             )})}</tbody>
@@ -962,7 +973,11 @@
                     <option value="">Seleccione ejemplar</option>
                     {(() => {
                       const loanedEjIds = new Set((prestamos || []).filter(p => p.fechaDevolucion == null).map(p => String(p.ejemplarId)));
-                      return (ejemplares || []).filter(ej => !loanedEjIds.has(String(ej.id))).map(ej => {
+                      return (ejemplares || []).filter(ej => !loanedEjIds.has(String(ej.id))).filter(ej => {
+                        const lib = (libros || []).find(lb => String(lb.id) === String(ej.libroId));
+                        // only allow ejemplares of libros that are visible (or when visibility missing, allow)
+                        return lib ? (lib.visible === undefined || lib.visible === null ? true : lib.visible) : false;
+                      }).map(ej => {
                         const lib = (libros || []).find(lb => String(lb.id) === String(ej.libroId));
                         const title = lib ? lib.titulo : (`Libro ${ej.libroId}`);
                         return <option key={ej.id} value={ej.id}>{`Ej ${ej.id} - ${title}`}</option>;

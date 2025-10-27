@@ -61,6 +61,11 @@ public class LibroRepository {
         jdbc.update("UPDATE libro SET visible = 0 WHERE id = ?", id);
     }
 
+    public void restoreById(Long id) {
+        // logical restore: mark as visible
+        jdbc.update("UPDATE libro SET visible = 1 WHERE id = ?", id);
+    }
+
     public Libro findByIsbn(String isbn) {
         try {
             return jdbc.queryForObject("SELECT * FROM libro WHERE isbn = ?", mapper, isbn);

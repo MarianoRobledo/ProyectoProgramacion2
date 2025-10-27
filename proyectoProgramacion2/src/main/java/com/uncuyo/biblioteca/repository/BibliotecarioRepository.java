@@ -42,6 +42,15 @@ public class BibliotecarioRepository {
         }
     }
 
+    public Bibliotecario findByLegajo(Integer legajo) {
+        if (legajo == null) return null;
+        try {
+            return jdbc.queryForObject("SELECT b.id as b_id, b.legajo, p.* FROM bibliotecario b JOIN persona p ON b.persona_id = p.id WHERE b.legajo = ?", mapper, legajo);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
     public Bibliotecario save(Bibliotecario b) {
         if (b.getId() == null) {
             // insert persona

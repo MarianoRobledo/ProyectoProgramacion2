@@ -12,9 +12,9 @@ INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES('Jorge Luis B
 INSERT INTO autor(nombre,fechaDeFallecimiento,nacionalidad) VALUES('Isabel Allende','02-08-1942','Chilena');
 
 -- Books
-INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('978-1','Cien Años de Soledad',1,1967,1);
-INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('978-2','Ficciones',2,1944,2);
-INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('978-3','La Casa de los Espíritus',3,1982,3);
+INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('978-3-16-148410-0','Cien Años de Soledad',1,1967,1);
+INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('0306406152','Ficciones',2,1944,2);
+INSERT INTO libro(isbn,titulo,editorial_id,anioPublicacion,autor_id) VALUES('978-0-306-40615-7','La Casa de los Espíritus',3,1982,3);
 
 -- Ejemplares
 INSERT INTO ejemplar(libro_id) VALUES(1);

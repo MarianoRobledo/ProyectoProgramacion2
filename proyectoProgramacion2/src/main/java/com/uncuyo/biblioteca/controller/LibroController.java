@@ -37,4 +37,7 @@ public class LibroController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) { service.eliminarLibro(id); return ResponseEntity.noContent().build(); }
+
+    @PutMapping("/{id}/restore")
+    public ResponseEntity<Void> restore(@PathVariable Long id) { service.restaurarLibro(id); return ResponseEntity.noContent().build(); }
 }
